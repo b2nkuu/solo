@@ -203,6 +203,8 @@ If a PR was opened, add a second line: `🔀 PR: <url>`.
 This appendix defines the canonical PR body that **both** `/solo:done` step 8 and `/solo:workflow` Stage E step 8 produce. Single source of truth — drift between the two commands is a bug.
 
 > **Cache-lag note for self-edits.** When you (Claude) run `/solo:done` after a spec change to this very file (`commands/done.md`), re-read from disk first to get the latest appendix rules. The injected slash command body is frozen at session start, but the canonical render rules for the PR body live here and may have been updated by an in-session commit (or a freshly merged PR) — disk wins.
+>
+> **Approach call-out source.** The `[approach]` line consumed by Summary synthesis (below) is expected to be written automatically by `/spirit:implement` Phase 5 — tracked in `b2nkuu/spirit#8`. Until that ships, the line only appears when the user writes it manually via `/solo:note <n> "[approach] …"`. A PR with no Approach call-out is the normal `/solo:workflow` path and is not a bug.
 
 ### Render order (top to bottom)
 

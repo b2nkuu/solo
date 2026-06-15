@@ -15,6 +15,8 @@ The slash command body Claude sees is **injected at session start** and stays fr
 
 This matters most when `/solo:workflow` is being run inside the very session that just edited any of these specs — typical dogfood scenario for solo itself. Re-read on disk first, then run.
 
+Long-term enforcement (when the user also runs spirit): the dogfood verification step is tracked in `b2nkuu/spirit#9` — Phase 6 of `/spirit:implement` is expected to re-read disk + simulate the new behaviour automatically for any PR that touches `commands/*.md` or `skills/*/SKILL.md`. Until that ships, this "Cache lag awareness" section is the convention.
+
 ## When to reach for it
 
 - Small planned backlog (typically 2–8 issues) that all have AC + Test Plan filled.

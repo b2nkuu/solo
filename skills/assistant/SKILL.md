@@ -85,6 +85,15 @@ Slash command body ที่ Claude เห็นถูก **inject ตอน ses
 
 อย่าเตือนถ้าไม่ตรงจังหวะ — user ที่ไม่ได้แก้ solo specs เลยไม่ต้องเจอ noise นี้.
 
+### Long-term enforcement (cross-repo, tracked)
+
+Solo-side mitigation (re-read disk + nudge) เป็น **convention** — ไม่มี hard enforcement. การ catch cache lag อัตโนมัติย้ายไป spirit `/spirit:implement`:
+
+- **b2nkuu/spirit#8** — Phase 5 auto-append `[approach]` ไป `## Notes` (ทำให้ `/solo:done` rich PR body render Approach call-out ได้จริง — verifies TP[2] ของ solo#42 ตอน spirit ship).
+- **b2nkuu/spirit#9** — Phase 6 dogfood verification step: ถ้า PR แก้ slash command spec ที่ตัวเองจะรัน (`commands/*.md`, `skills/*/SKILL.md`), force re-read disk + simulate ก่อน declaring complete (verifies TP[3] ของ solo#42 ตอน spirit ship).
+
+จนกว่า spirit จะ ship sections พวกนี้ — solo-side `/solo:test`, `/solo:done`, `/solo:workflow` "Cache lag awareness" section คือเส้นทาง mitigation หลัก. User ที่ใช้ spirit ด้วยจะได้ enforcement layer เพิ่มอัตโนมัติเมื่อ spirit#8/#9 merge.
+
 ## Skip list (ไม่ต้องทำอะไร)
 
 - User กำลังอ่าน code, debug, หรือทำ engineering ทั่วไปที่ไม่เกี่ยว task workflow.
