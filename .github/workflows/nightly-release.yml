@@ -1,0 +1,28 @@
+name: Nightly Release
+
+on:
+  schedule:
+    # 00:00 UTC daily
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  release:
+    name: Tag + Release if new commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute CalVer
+        id: ver
+        run: |
+          TODAY=$(date -u +%Y.%m.%d)
+          echo "today=$TODAY" >> "$GITHUB_OUTPUT"
+          echo "tag=$TODAY" >> "$GITHUB_OUTPUT"
