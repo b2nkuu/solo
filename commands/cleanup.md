@@ -110,6 +110,8 @@ Delete the <K> stale entries? [y/N]
 
 Show every group only when non-empty — the `Pruned remote refs` line is omitted when the prune count is `0`. The `Delete the <K> stale entries?` line is omitted when `K == 0` — in that case the preview was purely informational.
 
+**Orphan remote refs are intentionally not surfaced here.** If a branch still exists on `origin` because `gh pr merge --delete-branch` silent-failed at merge time, the preview will not list it — remote branch deletion is out of scope for this command. See the Notes section for the manual recovery path (`gh api -X DELETE …`). Silence in the preview is not a bug; it reflects the local-only contract.
+
 ### 6. Apply
 
 Only on `y` (case-insensitive). For each stale entry, in this exact order:
@@ -134,6 +136,8 @@ Sequential loop — one branch at a time. If any single delete fails, surface th
 ```
 
 Each `Failed` entry gets a follow-up line citing the branch and the error.
+
+`Remote refs pruned` counts only **local remote-tracking refs** dropped by `git remote prune origin` in step 2 — i.e. branches GitHub had already deleted. Orphan remote refs (still live on `origin` despite `--delete-branch`) are **not** counted here and not reported anywhere in the summary; remote = out of scope. See Notes for manual recovery.
 
 ## Design constraints
 
