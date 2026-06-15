@@ -149,3 +149,8 @@ Each `Failed` entry gets a follow-up line citing the branch and the error.
 - The local main / trunk branch is never a candidate. It's filtered out in step 3 by name.
 - Branches that match no issue and have no PR are conservatively classified as `active` (skipped). Treating them as stale would risk deleting work-in-progress branches the user created outside `/solo:start`.
 - `release/<version>` bump branches don't have an issue but do have a PR — the `release-bump` row handles them. After merge, they're as stale as any task branch.
+- **Orphan remote refs are out of scope.** Sometimes a PR is merged with `gh pr merge --delete-branch` but the upstream ref persists on `origin` (silent fail — most often branch protection, restricted permissions, or a default-branch reference still pointing at it). `git remote prune origin` in step 2 does **not** delete those refs — prune only drops local remote-tracking refs for branches GitHub has already removed. `/solo:cleanup` will not surface or delete these; remote branch lifecycle is `gh pr merge --delete-branch`'s responsibility, not this command's. Manual recovery when you spot one:
+  ```bash
+  gh api -X DELETE /repos/<owner>/<repo>/git/refs/heads/<branch>
+  ```
+  Or delete it from the GitHub web UI (`Branches` page → trash icon next to the branch). After the remote ref is gone, re-run `/solo:cleanup` to prune the now-dangling local remote-tracking ref.
