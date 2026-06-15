@@ -71,3 +71,113 @@ jobs:
           else
             echo "release=yes" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Idempotency — skip if today's tag already exists
+        id: idem
+        if: steps.gate.outputs.release == 'yes' && steps.escape.outputs.release == 'yes'
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          git fetch --tags --quiet
+          if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "tag $TAG already exists — second run today, skipping"
+            echo "release=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump plugin.json version
+        if: steps.idem.outputs.release == 'yes'
+        run: |
+          TODAY="${{ steps.ver.outputs.today }}"
+          CURRENT=$(jq -r .version .claude-plugin/plugin.json)
+          if [ "$CURRENT" = "$TODAY" ]; then
+            echo "version already $TODAY — skipping bump commit"
+            exit 0
+          fi
+          tmp=$(mktemp)
+          jq --arg v "$TODAY" '.version = $v' .claude-plugin/plugin.json > "$tmp"
+          mv "$tmp" .claude-plugin/plugin.json
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .claude-plugin/plugin.json
+          git commit -m "chore(release): bump .claude-plugin/plugin.json to $TODAY"
+          git push origin HEAD:main
+
+      - name: Build release notes grouped by type
+        id: notes
+        if: steps.idem.outputs.release == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PREV="${{ steps.gate.outputs.prev_tag }}"
+          TAG="${{ steps.ver.outputs.tag }}"
+          SINCE=""
+          if [ -n "$PREV" ]; then
+            SINCE=$(git log -1 --format=%cI "$PREV" 2>/dev/null || echo "")
+          fi
+
+          # Fetch closed issues; filter in jq by closedAt > SINCE (when set).
+          RAW=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --state closed \
+            --limit 500 \
+            --json number,title,labels,closedAt)
+
+          if [ -n "$SINCE" ]; then
+            FILTERED=$(echo "$RAW" | jq --arg since "$SINCE" '[.[] | select(.closedAt > $since)]')
+          else
+            FILTERED=$(echo "$RAW")
+          fi
+
+          features=$(echo "$FILTERED" | jq -r '.[] | select([.labels[].name] | index("type:feature")) | "- #\(.number) \(.title)"')
+          fixes=$(echo "$FILTERED"    | jq -r '.[] | select([.labels[].name] | index("type:bug"))     | "- #\(.number) \(.title)"')
+          other=$(echo "$FILTERED"    | jq -r '.[] | select(([.labels[].name] | index("type:feature") | not) and ([.labels[].name] | index("type:bug") | not)) | "- #\(.number) \(.title)"')
+
+          NOTES_FILE="$RUNNER_TEMP/notes.md"
+          {
+            echo "Automated nightly release."
+            echo
+            if [ -n "$features" ]; then
+              echo "## Features"
+              echo "$features"
+              echo
+            fi
+            if [ -n "$fixes" ]; then
+              echo "## Fixes"
+              echo "$fixes"
+              echo
+            fi
+            if [ -n "$other" ]; then
+              echo "## Other"
+              echo "$other"
+              echo
+            fi
+            if [ -z "$features$fixes$other" ]; then
+              echo "_No closed issues since ${PREV:-repo start}._"
+            fi
+          } > "$NOTES_FILE"
+
+          echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+          echo "---- preview ----"
+          cat "$NOTES_FILE"
+
+      - name: Tag + GitHub Release
+        if: steps.idem.outputs.release == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          # Re-check after bump push: tag still shouldn't exist remotely.
+          git fetch --tags --quiet
+          if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "tag $TAG appeared after bump — skipping (idempotent)"
+            exit 0
+          fi
+          git tag -a "$TAG" -m "Nightly release $TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "$TAG" \
+            --notes-file "${{ steps.notes.outputs.notes_file }}" \
+            --target main
