@@ -110,6 +110,8 @@ Delete the <K> stale entries? [y/N]
 
 Show every group only when non-empty — the `Pruned remote refs` line is omitted when the prune count is `0`. The `Delete the <K> stale entries?` line is omitted when `K == 0` — in that case the preview was purely informational.
 
+**Orphan remote refs are intentionally not surfaced here.** If a branch still exists on `origin` because `gh pr merge --delete-branch` silent-failed at merge time, the preview will not list it — remote branch deletion is out of scope for this command. See the Notes section for the manual recovery path (`gh api -X DELETE …`). Silence in the preview is not a bug; it reflects the local-only contract.
+
 ### 6. Apply
 
 Only on `y` (case-insensitive). For each stale entry, in this exact order:
@@ -135,6 +137,8 @@ Sequential loop — one branch at a time. If any single delete fails, surface th
 
 Each `Failed` entry gets a follow-up line citing the branch and the error.
 
+`Remote refs pruned` counts only **local remote-tracking refs** dropped by `git remote prune origin` in step 2 — i.e. branches GitHub had already deleted. Orphan remote refs (still live on `origin` despite `--delete-branch`) are **not** counted here and not reported anywhere in the summary; remote = out of scope. See Notes for manual recovery.
+
 ## Design constraints
 
 - **Local-only.** This command never touches remote branches; that's `gh pr merge --delete-branch`'s job at merge time. The only remote interaction is `git remote prune origin` to refresh local remote-tracking refs.
@@ -149,3 +153,8 @@ Each `Failed` entry gets a follow-up line citing the branch and the error.
 - The local main / trunk branch is never a candidate. It's filtered out in step 3 by name.
 - Branches that match no issue and have no PR are conservatively classified as `active` (skipped). Treating them as stale would risk deleting work-in-progress branches the user created outside `/solo:start`.
 - `release/<version>` bump branches don't have an issue but do have a PR — the `release-bump` row handles them. After merge, they're as stale as any task branch.
+- **Orphan remote refs are out of scope.** Sometimes a PR is merged with `gh pr merge --delete-branch` but the upstream ref persists on `origin` (silent fail — most often branch protection, restricted permissions, or a default-branch reference still pointing at it). `git remote prune origin` in step 2 does **not** delete those refs — prune only drops local remote-tracking refs for branches GitHub has already removed. `/solo:cleanup` will not surface or delete these; remote branch lifecycle is `gh pr merge --delete-branch`'s responsibility, not this command's. Manual recovery when you spot one:
+  ```bash
+  gh api -X DELETE /repos/<owner>/<repo>/git/refs/heads/<branch>
+  ```
+  Or delete it from the GitHub web UI (`Branches` page → trash icon next to the branch). After the remote ref is gone, re-run `/solo:cleanup` to prune the now-dangling local remote-tracking ref.
