@@ -30,17 +30,22 @@ gh issue comment <n> --repo <owner/repo> \
 
 The `<text>` is preserved verbatim. If it starts with `[decision]`, keep that prefix intact.
 
-### 3. Mirror decisions into body Notes
+### 3. Mirror structured tags into body Notes
 
-If the text starts with `[decision]`, ALSO append the same line to the issue body's `## Notes` section so structured decisions survive in the parseable body:
+If the text starts with one of the **structured tags** listed below, ALSO append the same line to the issue body's `## Notes` section so the tag survives in the parseable body:
+
+| Tag | Why it mirrors to body |
+|---|---|
+| `[decision]` | Long-term decision worth preserving in the audit trail |
+| `[approach]` | Read by `/solo:done` step 8 + `/solo:workflow` Stage E when building the PR `## Summary` (see `commands/done.md` appendix "PR body shape") |
 
 1. Fetch body: `gh issue view <n> --repo <owner/repo> --json body -q .body > /tmp/solo-body`
 2. Append a bullet under `## Notes`:
    - If `## Notes` already has content, add the new bullet at the end of that section (immediately before the next `---` or `<!-- solo:metadata` line, whichever comes first).
-   - Format: `- <YYYY-MM-DD>: [decision] <rest of text>`
+   - Format: `- <YYYY-MM-DD>: [<tag>] <rest of text>`
 3. `gh issue edit <n> --repo <owner/repo> --body-file /tmp/solo-body`
 
-For non-decision notes, **do not** edit the body — comment-only is sufficient.
+For notes that do **not** start with one of the structured tags above, comment-only is sufficient — leave the body unchanged.
 
 ### 4. Confirm
 

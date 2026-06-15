@@ -173,10 +173,16 @@ Orchestrator (synchronous, not an agent):
 5. `gh label create status:done --force`; `gh issue edit --remove-label status:in-progress --add-label status:done`.
 6. `gh issue close <n>`.
 7. `git -C "<worktree_path>" push -u origin "<branch>"`.
-8. `gh pr create --base <trunk> --head <branch> --title "<issue title>" --body "Closes #<n>"`.
+8. Render the PR body per the **Appendix: PR body shape** at the bottom of `commands/done.md` — that appendix defines section order, omit rules, Summary synthesis, and the recognised-tags table. Single source of truth — Stage E and `/solo:done` step 8 produce identical bodies. Write the rendered Markdown to a temp file, then:
+   ```
+   gh pr create --repo <owner/repo> --base <trunk> --head <branch> \
+     --title "<issue title>" \
+     --body-file /tmp/solo-pr-<n>.md
+   ```
+   Source data: the issue body **after** step 1-4 of this stage applied (ticks, `[workflow]` Notes line, `completed:` metadata). That way the PR mirrors what just shipped to the issue.
 9. Return `{ status: "green", issue: <n>, branch, worktree_path, pr_url, rounds: <retry+1> }`.
 
-If the PR call surfaces "a pull request already exists" (e.g. a previous failed re-run), fetch the URL with `gh pr view --json url` and use it.
+If the PR call surfaces "a pull request already exists" (e.g. a previous failed re-run), fetch the URL with `gh pr view --repo <owner/repo> --head <branch> --json url -q .url` and use it.
 
 #### Pipeline failure shape
 
