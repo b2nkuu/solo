@@ -10,6 +10,12 @@ Finish a task: record an optional outcome line, set `completed`, flip status, cl
 
 By default `/solo:done` refuses to close when any Acceptance or Test Plan item is still `- [ ]` after the tick prompt — closing should mean the work and its verification are complete. Pass `--force` (or `-f`) to override when an item has genuinely gone obsolete.
 
+## Cache lag awareness
+
+The slash command body Claude sees is **injected at session start** and stays frozen until `/reload-plugins` or a new session. The on-disk version at `commands/done.md` may have moved on (a recent PR to solo's own specs is the common case). If the disk version differs from the spec text you were handed, **prefer disk**. Before executing any step below, re-read `commands/done.md` from disk and follow that copy.
+
+This matters most when `/solo:done` is being run inside the very session that just edited `commands/done.md` — typical dogfood scenario for solo itself. Re-read on disk first, then run.
+
 ## Input
 
 `$ARGUMENTS` = `<issue-number> [--force]`. Recognised flags:
@@ -195,6 +201,8 @@ If a PR was opened, add a second line: `🔀 PR: <url>`.
 ## Appendix: PR body shape
 
 This appendix defines the canonical PR body that **both** `/solo:done` step 8 and `/solo:workflow` Stage E step 8 produce. Single source of truth — drift between the two commands is a bug.
+
+> **Cache-lag note for self-edits.** When you (Claude) run `/solo:done` after a spec change to this very file (`commands/done.md`), re-read from disk first to get the latest appendix rules. The injected slash command body is frozen at session start, but the canonical render rules for the PR body live here and may have been updated by an in-session commit (or a freshly merged PR) — disk wins.
 
 ### Render order (top to bottom)
 

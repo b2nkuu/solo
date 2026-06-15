@@ -9,6 +9,12 @@ Pick every `status:planned` issue in the current milestone and drive each one th
 
 Use this after `/solo:plan` has set Acceptance + Test Plan on every backlog item and you want the planned slice to ship without sitting in front of it.
 
+## Cache lag awareness
+
+The slash command body Claude sees is **injected at session start** and stays frozen until `/reload-plugins` or a new session. The on-disk version at `commands/workflow.md` (and the sibling `commands/start.md`, `commands/test.md`, `commands/done.md` that its pipeline stages mirror) may have moved on. If the disk version differs from the spec text you were handed, **prefer disk**. Before executing any step below, re-read `commands/workflow.md` from disk — and re-read the sibling command files whenever a pipeline stage delegates to their behaviour (Stage A mirrors start, Stage D mirrors test, Stage E mirrors done's PR-body appendix).
+
+This matters most when `/solo:workflow` is being run inside the very session that just edited any of these specs — typical dogfood scenario for solo itself. Re-read on disk first, then run.
+
 ## When to reach for it
 
 - Small planned backlog (typically 2–8 issues) that all have AC + Test Plan filled.
