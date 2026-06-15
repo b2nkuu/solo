@@ -316,3 +316,12 @@ Then update `.solo/config.yml` `milestone.current:` to the new name (or empty st
 
 - Solo follows trunk-based development: no release branches. Hotfix = new commit on trunk + new patch tag. Patch tags (e.g. `v0.3.1`) ship through the hotfix flow and do **not** create or close a milestone — milestones track minor/major scope only (`x.(y+1).0`). If the user asks for a release branch, explain why solo does not support it (link to README's Releases section).
 - Never `git push --force`. Never delete tags.
+
+### Coexistence with nightly auto-release
+
+Solo ships a nightly GitHub Actions workflow at `.github/workflows/nightly-release.yml` that auto-tags trunk with a `YYYY.MM.DD` CalVer tag once per day when new commits exist. The two paths intentionally do **not** lock each other:
+
+- **No mutual exclusion.** `/solo:release` does not check for the nightly workflow's state, and the nightly workflow does not check for an in-flight `/solo:release`. Tag collisions are prevented by the tag-already-exists guard in both flows (manual: Guards summary; nightly: `git rev-parse refs/tags/$TAG`).
+- **Different tag namespaces in practice.** Manual `/solo:release` uses semver-style tags (`v0.4.0`, `v0.4.1`) driven by milestone scope. Nightly uses CalVer (`2026.06.16`). They live alongside each other.
+- **Escape hatch.** To skip a nightly release on a given day, open a PR labeled `[wip]` or `do-not-release`. The nightly workflow exits cleanly without tagging.
+- **Manual override anytime.** Running `/solo:release` mid-day is unaffected by the cron schedule — it follows the same guards (clean trunk, in-sync, milestone hygiene) regardless of whether nightly has run yet.
