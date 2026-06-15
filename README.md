@@ -57,7 +57,7 @@ You don't need `/solo:init` to start capturing — `/solo:capture` works out of 
 | `/solo:start` | Mark in-progress + create branch (single issue) | `<issue#> [--force]` |
 | `/solo:workflow` | Run every planned issue end-to-end through an autonomous Workflow (start → implement → test → done + PR) | — |
 | `/solo:test` | Walk the test plan, run or verify each item, tick passed | `<issue#>` |
-| `/solo:done` | Record outcome + close (refuses on unticked AC/Test Plan unless `--force`) | `<issue#> [--force]` |
+| `/solo:done` | Record outcome + close + open a rich PR (Summary + AC + Test Plan + Notes); refuses on unticked AC/Test Plan unless `--force` | `<issue#> [--force]` |
 | `/solo:note` | Append a timestamped note | `<issue#> "text"` |
 | `/solo:block` | Mark blocked with a reason | `<issue#> "reason"` |
 | `/solo:unblock` | Resume a blocked task | `<issue#> ["resolution"]` |

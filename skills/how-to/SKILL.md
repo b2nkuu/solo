@@ -141,7 +141,7 @@ Sweep local branches + worktrees ที่ issue ปิดแล้ว / PR merg
 | `/solo:start` | Flip in-progress + branch (single issue) | `<issue#> [--force]` |
 | `/solo:workflow` | Batch ทุก planned ผ่าน lifecycle เต็ม (start → implement → test → done + PR) | — |
 | `/solo:test` | Walk test plan, run or verify, tick passed items | `<issue#>` |
-| `/solo:done` | Outcome + close + PR (refuses on unticked AC/Test Plan; `--force` override) | `<issue#> [--force]` |
+| `/solo:done` | Outcome + close + rich PR (Summary + AC + Test Plan + Notes; refuses on unticked AC/TP; `--force` override) | `<issue#> [--force]` |
 | `/solo:note` | Append note | `<issue#> "text"` |
 | `/solo:block` | Mark blocked | `<issue#> "reason"` |
 | `/solo:unblock` | Resume | `<issue#> ["resolution"]` |

@@ -161,17 +161,25 @@ Branch <name> is on this issue. Open a PR to <trunk>? [Y/n]
 
 On `y`:
 
-```bash
-git push -u origin <branch>
-gh pr create --base <trunk> --head <branch> \
-  --title "<issue title>" \
-  --body "Closes #<n>"
-```
+1. Build the PR body per the **PR body shape** appendix at the bottom of this file. Use the issue body that step 4 just wrote — no second prompt to the user. Re-fetch the body via `gh issue view <n> --json body -q .body` rather than reusing an in-memory copy, so a step 4 failure that aborts before this point is impossible to render past. Write the rendered Markdown to a temp file so newlines and code blocks survive (`gh pr create --body "..."` mangles multi-line content; `--body-file` does not).
+
+   ```bash
+   # Render the body per the appendix, write to /tmp/solo-pr-<n>.md
+   ```
+
+2. Push and open the PR with the body file:
+
+   ```bash
+   git push -u origin <branch>
+   gh pr create --repo <owner/repo> --base <trunk> --head <branch> \
+     --title "<issue title>" \
+     --body-file /tmp/solo-pr-<n>.md
+   ```
 
 If `gh pr create` fails because a PR already exists for the branch, surface the existing URL instead of erroring out:
 
 ```bash
-gh pr view --json url -q .url 2>/dev/null
+gh pr view --repo <owner/repo> --head <branch> --json url -q .url 2>/dev/null
 ```
 
 The principle: short-lived branches → merged back to trunk fast, not left dangling.
@@ -183,3 +191,78 @@ The principle: short-lived branches → merged back to trunk fast, not left dang
 ```
 
 If a PR was opened, add a second line: `🔀 PR: <url>`.
+
+## Appendix: PR body shape
+
+This appendix defines the canonical PR body that **both** `/solo:done` step 8 and `/solo:workflow` Stage E step 8 produce. Single source of truth — drift between the two commands is a bug.
+
+### Render order (top to bottom)
+
+```markdown
+Closes #<n>
+
+## Summary
+<one paragraph synthesizing the issue title + ## What + the most recent [approach] line in ## Notes, if any>
+
+## Acceptance
+- [<x or space>] <item>
+…
+
+## Test Plan
+- [<x or space>] <item>
+…
+
+## Notes
+<verbatim copy of the issue's ## Notes block, with the trailing <!-- solo:metadata --> comment stripped>
+```
+
+Every section appears **only when non-empty after rendering**:
+
+- `Closes #<n>` — always present (first line, single line).
+- `## Summary` — always present. See "Summary synthesis" below for fallback when sources are sparse.
+- `## Acceptance` — omitted when the issue's `## Acceptance` is skippable. Skippable means the heading is absent, OR the section contains no `- [ ]` / `- [x]` items at all (whitespace, the empty `- [ ]` placeholder, or stray text without checklist syntax all count as "no items"). Ticks in the rendered output reflect the body that step 4 just wrote, so a `--force` close shows any `- [ ]` lines that survived the gate.
+- `## Test Plan` — same omit rule against the issue's `## Test Plan`.
+- `## Notes` — copy the issue's `## Notes` block verbatim with two strip operations applied **only** to the bottom of the section:
+  1. Remove a trailing `---` line if it is the **last non-blank line**.
+  2. Remove a trailing `<!-- solo:metadata … -->` HTML comment if it is the last non-blank block (the comment itself spans multiple lines — strip the whole opening-to-closing comment).
+  A `---` or `<!-- … -->` that appears anywhere **above** the trailing block is preserved verbatim (a user may have intentionally pasted one inside a `[decision]` line). If the resulting section has no remaining non-blank lines, omit the `## Notes` heading from the PR body entirely. Preserve every other line including the timestamped `[test]` / `[done]` / `[done-forced]` / `[workflow]` / `[approach]` / `[decision]` / `[blocked]` entries — that audit trail is the whole point.
+
+Do **not** insert section headings that have no content.
+
+### Summary synthesis
+
+The `## Summary` paragraph is built from these three sources, in priority order:
+
+1. **Issue title** — always available.
+2. **`## What`** — copy the first paragraph (until the first blank line) as the structural backbone.
+3. **Last `[approach]` line in `## Notes`** — if the user (or `/spirit:implement`) wrote one, splice the gist into the paragraph as "Approach: <gist>" or fold it inline. The line format is:
+   ```
+   - <YYYY-MM-DD>: [approach] <one-line description of the chosen approach>
+   ```
+   "Last" means **last in file order** (Notes are date-stamped only, not time-stamped, so file order is the canonical resolution for same-day duplicates). Later approach lines override earlier ones.
+
+Fallback when sources are sparse:
+
+- No `## What` content → Summary is the issue title used verbatim as a single sentence. Append `.` only if the title does not already end with sentence punctuation (`.`, `!`, `?`, `…`). Never paraphrase — preserve the exact title text, including non-English script and question marks like "...ได้ไหม?".
+- No `[approach]` line → render Summary from title + `## What` without an Approach call-out. This is the **expected** path for `/solo:workflow`-driven PRs, which never write `[approach]` lines themselves.
+- Both empty → Summary is the title alone, rendered per the rule above. The heading still appears (Summary is the only always-present section after `Closes`).
+
+Note: the most recent `[done]` (from `/solo:done` step 4) or `[workflow]` (from `/solo:workflow` Stage E) line is part of the verbatim Notes copy, **not** the Summary. Don't double-render them.
+
+Keep the paragraph **under ~120 words**. Never invent scope that isn't in the issue body — Wabi-Sabi: ship what's true, don't fabricate.
+
+### Recognised `## Notes` tags
+
+These bracketed tags carry meaning across solo commands. Spelled here so producers and consumers agree:
+
+| Tag | Written by | Lands in body Notes? | Meaning |
+|---|---|---|---|
+| `[test]` | `/solo:test` step 6 | yes | Per-walk pass/fail/skip summary |
+| `[done]` | `/solo:done` step 4 | yes | Outcome line from the close prompt |
+| `[done-forced]` | `/solo:done --force` step 4 | yes | What slipped past the completion gate |
+| `[workflow]` | `/solo:workflow` Stage E | yes | Auto-close audit (`auto-closed (N rounds, M commits)`) |
+| `[approach]` | `/spirit:implement` Phase 5, or manual `/solo:note <n> "[approach] …"` | yes (via `/solo:note` mirror) | One-line description of the chosen approach, consumed by the Summary synthesis above |
+| `[blocked]` | `/solo:block <n> "<reason>"` | yes | Reason the issue was blocked |
+| `[decision]` | `/solo:note <n> "[decision] …"` | yes (via `/solo:note` mirror) | A decision worth preserving in the body, not just the comment thread |
+
+Every tag in the table lands in the body's `## Notes` section by design, so all of them survive the verbatim copy into the PR body. A line that does not start with a bracketed tag is fine — it just doesn't get special treatment by the synthesis logic above.
