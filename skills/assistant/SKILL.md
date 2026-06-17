@@ -72,6 +72,28 @@ solo assume [trunk-based development](https://trunkbaseddevelopment.com/). Coach
 
 กฎ: บรรทัดเดียว, ไม่บังคับ, user เลือกจะใช้หรือไม่ก็ได้.
 
+## Cache lag awareness (สำหรับ dogfood solo เอง)
+
+Slash command body ที่ Claude เห็นถูก **inject ตอน session start** แล้วค้างจนกว่าจะ `/reload-plugins` หรือเปิด session ใหม่. ถ้า user แก้ spec ของ `commands/<n>.md` ใน session เดียวกัน (เช่น merge PR ที่อัปเดต `/solo:test` หรือ `/solo:done`) แล้วเรียก command นั้นต่อใน session เดิม — Claude จะยังเดิน flow เก่าตาม cached body, ไม่ตาม disk.
+
+กฎสั้นๆ เวลาเข้าจังหวะนี้:
+
+- ถ้า session ใหม่ หรือ user เพิ่ง `/reload-plugins` → cache ตรงกับ disk, รันได้ตรงๆ.
+- ถ้ายังอยู่ใน session เดิมหลังแก้ spec → **prefer disk**. Nudge user แบบบรรทัดเดียว:
+  > Spec `/solo:<n>` เพิ่งแก้ใน session นี้ — cache อาจเก่า. ก่อนรัน ผม re-read `commands/<n>.md` จาก disk ก่อน (หรือ user `/reload-plugins` ก็ได้) เพื่อกัน flow เก่า. โอเคไหมครับ?
+- กฎเดียวกัน apply กับ `skills/assistant/SKILL.md` (ไฟล์นี้) เอง — แก้แล้ว behavior ที่ inject ไว้ใน session เดิมจะยังเก่า.
+
+อย่าเตือนถ้าไม่ตรงจังหวะ — user ที่ไม่ได้แก้ solo specs เลยไม่ต้องเจอ noise นี้.
+
+### Long-term enforcement (cross-repo, tracked)
+
+Solo-side mitigation (re-read disk + nudge) เป็น **convention** — ไม่มี hard enforcement. การ catch cache lag อัตโนมัติย้ายไป spirit `/spirit:implement`:
+
+- **b2nkuu/spirit#8** — Phase 5 auto-append `[approach]` ไป `## Notes` (ทำให้ `/solo:done` rich PR body render Approach call-out ได้จริง — verifies TP[2] ของ solo#42 ตอน spirit ship).
+- **b2nkuu/spirit#9** — Phase 6 dogfood verification step: ถ้า PR แก้ slash command spec ที่ตัวเองจะรัน (`commands/*.md`, `skills/*/SKILL.md`), force re-read disk + simulate ก่อน declaring complete (verifies TP[3] ของ solo#42 ตอน spirit ship).
+
+จนกว่า spirit จะ ship sections พวกนี้ — solo-side `/solo:test`, `/solo:done`, `/solo:workflow` "Cache lag awareness" section คือเส้นทาง mitigation หลัก. User ที่ใช้ spirit ด้วยจะได้ enforcement layer เพิ่มอัตโนมัติเมื่อ spirit#8/#9 merge.
+
 ## Skip list (ไม่ต้องทำอะไร)
 
 - User กำลังอ่าน code, debug, หรือทำ engineering ทั่วไปที่ไม่เกี่ยว task workflow.

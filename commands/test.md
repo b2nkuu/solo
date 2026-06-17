@@ -10,6 +10,12 @@ Walk through every item under `## Acceptance` **and** `## Test Plan` on an issue
 
 Use this after the work is done but before `/solo:done` — it converts both the promised acceptance criteria and the verification plan from intentions into a checked record of what was actually verified. AC and Test Plan get the same per-item rigor; closing should mean every promise + every verification was inspected one by one.
 
+## Cache lag awareness
+
+The slash command body Claude sees is **injected at session start** and stays frozen until `/reload-plugins` or a new session. The on-disk version at `commands/test.md` may have moved on (a recent PR to solo's own specs is the common case — e.g. the move from "walk TP only" to "walk AC + TP"). If the disk version differs from the spec text you were handed, **prefer disk**. Before executing any step below, re-read `commands/test.md` from disk and follow that copy.
+
+This matters most when `/solo:test` is being run inside the very session that just edited `commands/test.md` — typical dogfood scenario for solo itself. Re-read on disk first, then walk.
+
 ## Input
 
 `$ARGUMENTS` = issue number (no `#` prefix needed; tolerate it if given).
