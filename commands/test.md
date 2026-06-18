@@ -59,9 +59,94 @@ List the non-skippable sections in order — **Acceptance first, then Test Plan*
 
 If a section was skipped because it was skippable, omit its block and add a single line like `(Acceptance is empty — skipping)` or `(Test Plan is empty — skipping)`.
 
-### 4. Walk items one at a time
+### 4. Decide per section — batch first, then walk
 
-Walk **Acceptance first**, then Test Plan. Index restarts at `1` per section. For each item, do steps 4a–4c. The prompt header in 4b should clarify which section the item belongs to.
+For each non-skippable section (Acceptance first, then Test Plan), first try a batch decision (step 4-batch). If the user gives an empty input, fall through to the per-item walk (step 4a–4c). If the user gives an accepted batch verdict, skip the walk for that section.
+
+#### 4-batch. Batch decision (optional)
+
+Offer a batch decision **per section that will be walked**. Acceptance first, then Test Plan. For each non-skippable section, show:
+
+```
+Batch decision for <Section> (<N> items)? (e.g. "all:m", "all:s", "1,3:m, 2:f", or enter to walk one-by-one):
+```
+
+`<Section>` is `Acceptance` or `Test Plan`. `<N>` is the number of items in that section.
+
+Parse the response. Whitespace around tokens is ignored. Accepted shapes:
+
+- **Empty** (just enter) → fall through to the per-item walk (step 4a–4c) for this section. Today's behavior.
+- **`all:<verb>`** — applies the same verb to every item in the section. Verb is one of:
+  - `m` — mark every item pass (manual).
+  - `s` — leave every item unchanged.
+  - (No `all:f` and no `all:r` — failing or running everything in one shot is too dangerous; force per-item if the user wants that.)
+- **Comma-grouped index decisions** — one or more groups separated by `,`. Each group is `<indices>:<verb>` where `<indices>` is one or more comma-joined integers (e.g. `1,3:m` or `2:f`). Verbs are `m`, `f`, or `s`. Every item in the section must appear in exactly one group; missing indices are treated as `s` only if the user did not list them — but if the parser sees any group at all, only listed indices are touched and the rest are left unchanged (effectively `s`).
+
+  Concretely: groups are tokenized by splitting the input on `,` while respecting the `:verb` suffix. The simplest reliable parse: split on `,`, then walk tokens left-to-right; a token of the form `<int>:<verb>` closes the current pending group with that verb, while a bare `<int>` joins the pending group.
+
+  Examples:
+  - `1,3:m, 2:f` → group `[1,3]` verb `m`, group `[2]` verb `f`.
+  - `1,3:m, 2,4:f, 5:s` → three groups.
+  - `1:m, 2:m, 3:m` → three single-index groups, all `m`.
+
+**Validation — re-prompt without writing on any of these:**
+
+- Unknown verb anywhere (`all:x`, `1:z`, `all:f`, `all:r`).
+- Malformed group (e.g. `1,3` with no `:verb`, `:m` with no index, trailing `,`, empty token).
+- Out-of-range index (less than `1` or greater than `<N>`).
+- Duplicate indices across groups (same item appears twice).
+- Mixing `all:*` with index groups in the same input.
+
+On invalid input, print one line such as:
+
+```
+↳ unknown decision — try "all:m", "all:s", "1,3:m, 2:f", or enter to walk.
+```
+
+and re-prompt for the same section. Do not edit the body and do not advance to the next section.
+
+If the batch input is empty, proceed to step 4a–4c for this section. If a non-empty input is accepted, hold the parsed decision in memory (the apply rules live in step 4-batch-apply / 4-batch-fail) and skip 4a–4c for this section.
+
+#### 4-batch-apply. Apply `all:m` and `all:s`
+
+When the batch decision for a section is `all:m`, record the per-item tuples directly without prompting: every index `i` in the section becomes `(section, i, pass)`. Step 5 will then rewrite every `- [ ] ` to `- [x] ` in that section's block in a single body edit. The Notes line in step 6 collects this as `<N> pass / 0 fail / 0 skip` for the section (using the AC/TP combined format described in step 6 when both sections are walked).
+
+When the batch decision is `all:s`, record every index `i` as `(section, i, skip)`. Step 5 makes **no body changes** to that section's block — every tick stays exactly as it was. The Notes line in step 6 collects this as `0 pass / 0 fail / <N> skip` for the section.
+
+Neither mode prompts the user further for this section; both feed straight into the same batched body write as the walk path.
+
+#### 4-batch-groups. Apply comma-grouped index decisions
+
+When the batch decision parses into one or more `<indices>:<verb>` groups, fan out the verb to each listed index:
+
+- `m` group → each listed index becomes `(section, i, pass)`. Step 5 ticks those lines (`- [ ] ` → `- [x] `).
+- `s` group → each listed index becomes `(section, i, skip)`. Step 5 leaves those lines unchanged.
+- `f` group → each listed index becomes `(section, i, fail, note)` with a **shared** `note` collected once for the whole group (step 4-batch-fail). Step 5 forces those lines to `- [ ] ` (untick if previously ticked — failing now is the truth, same rule as the walk).
+
+Indices in the section that were **not** listed in any group default to `(section, i, skip)` — same effect as an unwalked item.
+
+Step 6 aggregates these tuples into the single `[test] X pass / Y fail / Z skip` half for the section (combined into the AC/TP line when both sections are walked). The per-failure sub-line in step 6 uses the **shared group note** for every index in an `f` group, so a `2,4:f` group with note `"flaky timer"` produces:
+
+```
+  - failed [<Section> 2]: flaky timer
+  - failed [<Section> 4]: flaky timer
+```
+
+#### 4-batch-fail. Shared failure note (group mode only)
+
+For each `f` group accepted in the batch step, prompt **once** for a shared note:
+
+```
+Failure note for <Section> [<i1>,<i2>,…] (enter to skip):
+```
+
+Record the same note on every `(section, i, fail, note)` tuple in that group (empty input → `(no note)`, same convention as the per-item `f` walk path). A single `f` group with one index still prompts once. `all:m` and `all:s` never produce `f` tuples, so no failure prompt fires for those modes.
+
+#### 4-walk. Walk items one at a time
+
+If the batch step returned empty for this section, walk it one at a time. For each item, do steps 4a–4c. The prompt header in 4b should clarify which section the item belongs to.
+
+Skip 4-walk entirely for any section that was fully resolved by a batch decision.
 
 #### 4a. Suggest how to verify
 
@@ -115,9 +200,11 @@ In memory, hold a tuple `(section, index, decision, note?)` for each item — `s
 
 Fetch the body, rewrite **both** the `## Acceptance` block and the `## Test Plan` block in place (only the sections that were walked):
 
-- For every item the walk marked `pass` (whether by `r` exit 0 or `m`), change `- [ ] ` to `- [x] ` in its own section.
+- For every item marked `pass` (whether by walk `r` exit 0, walk `m`, or batch `all:m`), change `- [ ] ` to `- [x] ` in its own section.
 - For `fail`, force the item to `- [ ] ` in its own section (untick it even if it was previously ticked — failing now is the truth).
-- For `skip`, leave the line unchanged.
+- For `skip` (whether walked `s` or batch `all:s`), leave the line unchanged.
+
+For `all:s`, the entire section block is unchanged — no body edit at all for that section.
 
 A failed AC item unticks the AC line; a failed TP item unticks the TP line. Never cross sections — index `2` in AC and index `2` in TP are independent.
 
