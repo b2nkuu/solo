@@ -115,6 +115,33 @@ When the batch decision is `all:s`, record every index `i` as `(section, i, skip
 
 Neither mode prompts the user further for this section; both feed straight into the same batched body write as the walk path.
 
+#### 4-batch-groups. Apply comma-grouped index decisions
+
+When the batch decision parses into one or more `<indices>:<verb>` groups, fan out the verb to each listed index:
+
+- `m` group → each listed index becomes `(section, i, pass)`. Step 5 ticks those lines (`- [ ] ` → `- [x] `).
+- `s` group → each listed index becomes `(section, i, skip)`. Step 5 leaves those lines unchanged.
+- `f` group → each listed index becomes `(section, i, fail, note)` with a **shared** `note` collected once for the whole group (step 4-batch-fail). Step 5 forces those lines to `- [ ] ` (untick if previously ticked — failing now is the truth, same rule as the walk).
+
+Indices in the section that were **not** listed in any group default to `(section, i, skip)` — same effect as an unwalked item.
+
+Step 6 aggregates these tuples into the single `[test] X pass / Y fail / Z skip` half for the section (combined into the AC/TP line when both sections are walked). The per-failure sub-line in step 6 uses the **shared group note** for every index in an `f` group, so a `2,4:f` group with note `"flaky timer"` produces:
+
+```
+  - failed [<Section> 2]: flaky timer
+  - failed [<Section> 4]: flaky timer
+```
+
+#### 4-batch-fail. Shared failure note (group mode only)
+
+For each `f` group accepted in the batch step, prompt **once** for a shared note:
+
+```
+Failure note for <Section> [<i1>,<i2>,…] (enter to skip):
+```
+
+Record the same note on every `(section, i, fail, note)` tuple in that group (empty input → `(no note)`, same convention as the per-item `f` walk path). A single `f` group with one index still prompts once. `all:m` and `all:s` never produce `f` tuples, so no failure prompt fires for those modes.
+
 #### 4-walk. Walk items one at a time
 
 If the batch step returned empty for this section, walk it one at a time. For each item, do steps 4a–4c. The prompt header in 4b should clarify which section the item belongs to.
