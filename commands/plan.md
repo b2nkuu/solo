@@ -15,7 +15,9 @@ Also offers a backfill pass for legacy issues missing a milestone (step 8) when 
 
 - `gh auth status` (stop on failure).
 - Resolve repo as usual.
-- Read `.solo/config.yml`: `milestone.current` (string), `milestone.required` (default `true`), and `display.show_assignee` (default: auto — render the `@login` prefix when ≥1 fetched issue has an assignee; explicit `true`/`false` overrides).
+- Read `.solo/config.yml`: `milestone.current` (string), `milestone.required` (default `true`), `display.show_assignee` (default: auto — render the `@login` prefix when ≥1 fetched issue has an assignee; explicit `true`/`false` overrides), and `language:` (string, default `english` when unset or missing).
+
+The `language:` value drives the prose language of the AC + Test Plan suggestions in step 6. Section headings (`## Acceptance`, `## Test Plan`) and machine-parsed markers stay in English regardless — see step 6 for the rule.
 
 ### 2. Fetch inbox
 
@@ -172,6 +174,7 @@ Generate AC + test plan for <N> planned items? [Y/n]
    - `type:task` → AC is concrete done-states; test plan is verification steps (often manual or smoke).
    - Aim for 3–5 AC items and 2–4 test plan items. Pull concrete nouns from the body — do not invent unrelated scope.
    - If the body has no `## What` content or the title is too vague, output `(no suggestion — provide your own or skip)` instead of guessing.
+   - **Language:** write the prose of each AC and Test Plan item in the `language:` configured in `.solo/config.yml` (default `english` when unset). Technical English terms — file paths, identifiers, command names, code fences, `## What`-style references — stay verbatim and are never translated. The section **headings** (`## Acceptance`, `## Test Plan`) and the checklist syntax (`- [ ]`) stay English regardless of `language:` — solo's own parsers depend on them.
 4. Show the suggestions:
    ```
    #<n> <title>

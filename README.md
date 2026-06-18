@@ -139,6 +139,10 @@ Refusals are up front: empty source list, any `size:xl` in the batch, or any iss
 version: 1
 repo: "owner/repo"
 
+# Discussion language for generated prose (AC + Test Plan items, PR Summary).
+# Default: "english" when unset. Accepts any freeform string (e.g. "thai", "en", "th").
+language: "english"
+
 defaults:
   inbox_label: "status:inbox"
   capture_type_guessing: true
@@ -157,6 +161,19 @@ display:
 ```
 
 No secrets — auth is entirely via `gh`.
+
+### Language
+
+`language:` controls the language solo uses when it generates fresh user-facing prose:
+
+- `/solo:plan` — AC + Test Plan suggestions are written in this language.
+- `/solo:done` — the PR body's `## Summary` paragraph is written in this language.
+
+Default behavior when the field is unset or missing is identical to today: English.
+
+**Section headings stay English regardless.** `## What`, `## Acceptance`, `## Test Plan`, `## Notes`, `## Summary`, and the `Closes #<n>` line are part of solo's parser contract — they never translate. Technical English terms (file paths, identifiers, command names, code) also stay verbatim. Only the prose inside the items / paragraph is generated in the configured language.
+
+Verbatim content is not retranslated. `/solo:done` copies the issue's `## Acceptance`, `## Test Plan`, and `## Notes` blocks into the PR body as-is — whatever language they were written in is the language they ship in. Existing issues + PRs are never rewritten by changing `language:`.
 
 ## Trunk-based development
 
