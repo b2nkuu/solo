@@ -15,7 +15,7 @@ Also offers a backfill pass for legacy issues missing a milestone (step 8) when 
 
 - `gh auth status` (stop on failure).
 - Resolve repo as usual.
-- Read `.solo/config.yml`: `milestone.current` (string) and `milestone.required` (default `true`).
+- Read `.solo/config.yml`: `milestone.current` (string), `milestone.required` (default `true`), and `display.show_assignee` (default: auto — render the `@login` prefix when ≥1 fetched issue has an assignee; explicit `true`/`false` overrides).
 
 ### 2. Fetch inbox
 
@@ -40,7 +40,7 @@ Render a numbered list of inbox items with their current type:
   …
 ```
 
-**Assignee prefix:** between the `[type]` bracket and `<title>`, render the issue's assignees as `@<login>` (or `@a,@b` joined by commas for multiple, no spaces). Drop the prefix entirely (no `@?`, no placeholder) when the assignee array is empty. Rendering is gated by `display.show_assignee` — when the toggle is off, omit the prefix.
+**Assignee prefix:** between the `[type]` bracket and `<title>`, render the issue's assignees as `@<login>` (or `@a,@b` joined by commas for multiple, no spaces). Drop the prefix entirely (no `@?`, no placeholder) when the assignee array is empty. Rendering is gated by `display.show_assignee` (read in step 1): explicit `true`/`false` overrides; unset is auto — on when any fetched inbox issue carries an assignee, off otherwise.
 
 Then ask the user once for a batch decision. Accept either:
 

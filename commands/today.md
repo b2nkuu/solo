@@ -13,7 +13,7 @@ Show a focused, scannable list of what to work on today.
 
 - Run `gh auth status`. On failure: stop, tell user to run `gh auth login`.
 - Resolve repo: `.solo/config.yml` `repo:` field → fallback `gh repo view --json nameWithOwner -q .nameWithOwner` → ask user.
-- Read `display.today_suggested_limit` (default `5`), `milestone.current`, and `milestone.required` (default `true`) from `.solo/config.yml`.
+- Read `display.today_suggested_limit` (default `5`), `display.show_assignee` (default: auto — see step 6), `milestone.current`, and `milestone.required` (default `true`) from `.solo/config.yml`.
 
 ### 2. Fetch open issues
 
@@ -77,7 +77,11 @@ Blocked (<count>):
 
 **Assignee prefix:** between the `[size]` bracket and `<title>`, render the issue's assignees as `@<login>` (or `@a,@b` joined by commas for multiple, no spaces). Drop the prefix entirely (no `@?`, no placeholder) when the assignee array is empty. The prefix appears only on **In Progress** and **Suggested Next** rows — Blocked rows keep the `⏸ <reason>` shape unchanged.
 
-Rendering is gated by `display.show_assignee` (see step 1). When the toggle is off, omit the prefix everywhere.
+Rendering is gated by `display.show_assignee` (see step 1):
+
+- **Explicit `true`** → always render the prefix (omit only for genuinely-unassigned issues).
+- **Explicit `false`** → never render the prefix, even when assignees exist.
+- **Unset (auto-detect, default)** → scan the issue list from step 2: if any open issue has a non-empty `assignees` array, render the prefix; otherwise omit it. This keeps single-owner repos clean while light-up multi-owner repos automatically.
 
 For the milestone progress line, fetch counts via:
 
