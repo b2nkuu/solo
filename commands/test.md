@@ -59,9 +59,59 @@ List the non-skippable sections in order — **Acceptance first, then Test Plan*
 
 If a section was skipped because it was skippable, omit its block and add a single line like `(Acceptance is empty — skipping)` or `(Test Plan is empty — skipping)`.
 
-### 4. Walk items one at a time
+### 4. Decide per section — batch first, then walk
 
-Walk **Acceptance first**, then Test Plan. Index restarts at `1` per section. For each item, do steps 4a–4c. The prompt header in 4b should clarify which section the item belongs to.
+For each non-skippable section (Acceptance first, then Test Plan), first try a batch decision (step 4-batch). If the user gives an empty input, fall through to the per-item walk (step 4a–4c). If the user gives an accepted batch verdict, skip the walk for that section.
+
+#### 4-batch. Batch decision (optional)
+
+Offer a batch decision **per section that will be walked**. Acceptance first, then Test Plan. For each non-skippable section, show:
+
+```
+Batch decision for <Section> (<N> items)? (e.g. "all:m", "all:s", "1,3:m, 2:f", or enter to walk one-by-one):
+```
+
+`<Section>` is `Acceptance` or `Test Plan`. `<N>` is the number of items in that section.
+
+Parse the response. Whitespace around tokens is ignored. Accepted shapes:
+
+- **Empty** (just enter) → fall through to the per-item walk (step 4a–4c) for this section. Today's behavior.
+- **`all:<verb>`** — applies the same verb to every item in the section. Verb is one of:
+  - `m` — mark every item pass (manual).
+  - `s` — leave every item unchanged.
+  - (No `all:f` and no `all:r` — failing or running everything in one shot is too dangerous; force per-item if the user wants that.)
+- **Comma-grouped index decisions** — one or more groups separated by `,`. Each group is `<indices>:<verb>` where `<indices>` is one or more comma-joined integers (e.g. `1,3:m` or `2:f`). Verbs are `m`, `f`, or `s`. Every item in the section must appear in exactly one group; missing indices are treated as `s` only if the user did not list them — but if the parser sees any group at all, only listed indices are touched and the rest are left unchanged (effectively `s`).
+
+  Concretely: groups are tokenized by splitting the input on `,` while respecting the `:verb` suffix. The simplest reliable parse: split on `,`, then walk tokens left-to-right; a token of the form `<int>:<verb>` closes the current pending group with that verb, while a bare `<int>` joins the pending group.
+
+  Examples:
+  - `1,3:m, 2:f` → group `[1,3]` verb `m`, group `[2]` verb `f`.
+  - `1,3:m, 2,4:f, 5:s` → three groups.
+  - `1:m, 2:m, 3:m` → three single-index groups, all `m`.
+
+**Validation — re-prompt without writing on any of these:**
+
+- Unknown verb anywhere (`all:x`, `1:z`, `all:f`, `all:r`).
+- Malformed group (e.g. `1,3` with no `:verb`, `:m` with no index, trailing `,`, empty token).
+- Out-of-range index (less than `1` or greater than `<N>`).
+- Duplicate indices across groups (same item appears twice).
+- Mixing `all:*` with index groups in the same input.
+
+On invalid input, print one line such as:
+
+```
+↳ unknown decision — try "all:m", "all:s", "1,3:m, 2:f", or enter to walk.
+```
+
+and re-prompt for the same section. Do not edit the body and do not advance to the next section.
+
+If the batch input is empty, proceed to step 4a–4c for this section. If a non-empty input is accepted, hold the parsed decision in memory (the apply rules live in step 4-batch-apply / 4-batch-fail) and skip 4a–4c for this section.
+
+#### 4-walk. Walk items one at a time
+
+If the batch step returned empty for this section, walk it one at a time. For each item, do steps 4a–4c. The prompt header in 4b should clarify which section the item belongs to.
+
+Skip 4-walk entirely for any section that was fully resolved by a batch decision.
 
 #### 4a. Suggest how to verify
 
