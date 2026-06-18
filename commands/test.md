@@ -151,7 +151,7 @@ If `<F_ac> + <F_tp> > 0`, also append a sub-line per failure with the user's not
 If `<F_ac> + <F_tp> > 0`, add a second line nudging next steps:
 
 ```
-   ↳ /solo:note <n> "[blocked] <reason>" if you're stuck, or fix and rerun /solo:test <n>.
+   ↳ Add a `[blocked] <reason>` line to the issue's ## Notes if you're stuck, or fix and rerun /solo:test <n>.
 ```
 
 If `<F_ac> + <F_tp> == 0` and every walked item is now ticked, add:

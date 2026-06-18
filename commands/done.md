@@ -204,7 +204,7 @@ This appendix defines the canonical PR body that **both** `/solo:done` step 8 an
 
 > **Cache-lag note for self-edits.** When you (Claude) run `/solo:done` after a spec change to this very file (`commands/done.md`), re-read from disk first to get the latest appendix rules. The injected slash command body is frozen at session start, but the canonical render rules for the PR body live here and may have been updated by an in-session commit (or a freshly merged PR) — disk wins.
 >
-> **Approach call-out source.** The `[approach]` line consumed by Summary synthesis (below) is expected to be written automatically by `/spirit:implement` Phase 5 — tracked in `b2nkuu/spirit#8`. Until that ships, the line only appears when the user writes it manually via `/solo:note <n> "[approach] …"`. A PR with no Approach call-out is the normal `/solo:workflow` path and is not a bug.
+> **Approach call-out source.** The `[approach]` line consumed by Summary synthesis (below) is expected to be written automatically by `/spirit:implement` Phase 5 — tracked in `b2nkuu/spirit#8`. Until that ships, the line only appears when the user writes it manually as a comment on the issue (or edits the body's `## Notes` directly). A PR with no Approach call-out is the normal `/solo:workflow` path and is not a bug.
 
 ### Render order (top to bottom)
 
@@ -271,8 +271,8 @@ These bracketed tags carry meaning across solo commands. Spelled here so produce
 | `[done]` | `/solo:done` step 4 | yes | Outcome line from the close prompt |
 | `[done-forced]` | `/solo:done --force` step 4 | yes | What slipped past the completion gate |
 | `[workflow]` | `/solo:workflow` Stage E | yes | Auto-close audit (`auto-closed (N rounds, M commits)`) |
-| `[approach]` | `/spirit:implement` Phase 5, or manual `/solo:note <n> "[approach] …"` | yes (via `/solo:note` mirror) | One-line description of the chosen approach, consumed by the Summary synthesis above |
-| `[blocked]` | `/solo:block <n> "<reason>"` | yes | Reason the issue was blocked |
-| `[decision]` | `/solo:note <n> "[decision] …"` | yes (via `/solo:note` mirror) | A decision worth preserving in the body, not just the comment thread |
+| `[approach]` | `/spirit:implement` Phase 5, or a manual comment / `## Notes` edit | yes | One-line description of the chosen approach, consumed by the Summary synthesis above |
+| `[blocked]` | Manual — applied directly to the issue when work stalls | yes | Reason the issue was blocked |
+| `[decision]` | Manual comment / `## Notes` edit | yes | A decision worth preserving in the body, not just the comment thread |
 
 Every tag in the table lands in the body's `## Notes` section by design, so all of them survive the verbatim copy into the PR body. A line that does not start with a bracketed tag is fine — it just doesn't get special treatment by the synthesis logic above.

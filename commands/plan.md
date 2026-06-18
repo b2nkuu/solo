@@ -7,11 +7,7 @@ allowed-tools: [Bash]
 
 Turn raw captures from the Inbox into planned work. Be efficient — batch the decisions.
 
-Also handles milestone management (`/solo:plan milestone …`) and backfill of legacy issues missing a milestone.
-
-## Sub-commands
-
-If `$ARGUMENTS` starts with `milestone`, jump to the **Milestone sub-command** section. Otherwise run the default Inbox flow below.
+Also offers a backfill pass for legacy issues missing a milestone (step 8) when strict milestone mode is on.
 
 ## Steps
 
@@ -51,7 +47,7 @@ Allowed values:
 
 - Priority: `high`, `med` (alias `medium`), `low`
 - Size: `xs`, `s`, `m`, `l`, `xl`
-- Milestone: `milestone:<name>` (optional, per item). The milestone must already exist — do not auto-create. Use `/solo:plan milestone create <name>` to make a new one.
+- Milestone: `milestone:<name>` (optional, per item). The milestone must already exist — do not auto-create. Create one in GitHub (web UI or `gh api repos/<owner/repo>/milestones -f title="<name>"`), then set `milestone.current` in `.solo/config.yml`.
 
 **Milestone default:** if the user omits `milestone:<name>` for an item, attach `milestone.current` (if set and still open). Items with no milestone after this default are allowed only when `milestone.required: false`; otherwise re-ask for the missing items.
 
@@ -227,55 +223,9 @@ Assign milestone? (name, "all:<name>", "skip", or enter to defer)
 On a name (e.g. `v0.4`) or `all:<name>`, apply via `gh issue edit <n> --milestone "<name>"`. Verify the milestone exists and is open first — if not, abort the assignment for that batch with:
 
 ```
-❌ Milestone "<name>" does not exist. Run /solo:plan milestone create <name> first, then re-run /solo:plan.
+❌ Milestone "<name>" does not exist. Create it in GitHub first (web UI or `gh api repos/<owner/repo>/milestones -f title="<name>"`), then re-run /solo:plan.
 ```
 
-Same rule as the inbox batch: `/solo:plan` never auto-creates milestones — keep creation explicit through the sub-command.
+Same rule as the inbox batch: `/solo:plan` never auto-creates milestones — keep creation explicit.
 
 Skip this step entirely when `milestone.required: false`.
-
-## Milestone sub-command
-
-Invoked as `/solo:plan milestone <action> [args]`. Actions:
-
-### `list`
-
-```bash
-gh api "repos/<owner/repo>/milestones?state=open" \
-  --jq '.[] | "\(.number)\t\(.title)\t\(.open_issues)/\(.open_issues + .closed_issues)"'
-```
-
-Render:
-
-```
-📦 Milestones (open):
-  #<num> <title>  (<closed>/<total> done)  [current]
-  …
-```
-
-Mark the milestone matching `milestone.current` with `[current]`.
-
-### `create <name>`
-
-```bash
-gh api repos/<owner/repo>/milestones -f title="<name>"
-```
-
-Then ask `Set as current? [Y/n]`. On `y` (default), update `.solo/config.yml` `milestone.current:` in place.
-
-If the API returns "already_exists", surface that and offer to just set it as current.
-
-### `current [<name>]`
-
-- No arg → print `milestone.current` from config.
-- With a name → verify it is an open milestone, then update `.solo/config.yml` `milestone.current:` in place.
-
-### `close <name>`
-
-```bash
-MS_NUMBER=$(gh api "repos/<owner/repo>/milestones?state=open" \
-  --jq '.[] | select(.title=="<name>") | .number')
-gh api -X PATCH "repos/<owner/repo>/milestones/$MS_NUMBER" -f state=closed
-```
-
-If `<name>` was `milestone.current`, clear it in config (set to empty string) and remind the user that new captures need a current milestone (block if `milestone.required: true`). Suggest running `/solo:release` instead if they wanted to cut a release.
