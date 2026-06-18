@@ -15,15 +15,17 @@ Also offers a backfill pass for legacy issues missing a milestone (step 8) when 
 
 - `gh auth status` (stop on failure).
 - Resolve repo as usual.
-- Read `.solo/config.yml`: `milestone.current` (string) and `milestone.required` (default `true`).
+- Read `.solo/config.yml`: `milestone.current` (string), `milestone.required` (default `true`), and `display.show_assignee` (default: auto — render the `@login` prefix when ≥1 fetched issue has an assignee; explicit `true`/`false` overrides).
 
 ### 2. Fetch inbox
 
 ```bash
 gh issue list --repo <owner/repo> --state open \
   --label "status:inbox" --limit 100 \
-  --json number,title,labels
+  --json number,title,labels,assignees
 ```
+
+`assignees` is an array of objects; the `.login` of each entry is used by the renderer in step 3 to prefix the title (see `display.show_assignee` config). An empty array means unassigned.
 
 If empty: print `📭 Inbox is empty.` and stop.
 
@@ -33,10 +35,12 @@ Render a numbered list of inbox items with their current type:
 
 ```
 📋 Inbox (<count>):
-  [1] #<n> [<type>] <title>
-  [2] #<n> [<type>] <title>
+  [1] #<n> [<type>] @<login> <title>
+  [2] #<n> [<type>] @<login> <title>
   …
 ```
+
+**Assignee prefix:** between the `[type]` bracket and `<title>`, render the issue's assignees as `@<login>` (or `@a,@b` joined by commas for multiple, no spaces). Drop the prefix entirely (no `@?`, no placeholder) when the assignee array is empty. Rendering is gated by `display.show_assignee` (read in step 1): explicit `true`/`false` overrides; unset is auto — on when any fetched inbox issue carries an assignee, off otherwise.
 
 Then ask the user once for a batch decision. Accept either:
 

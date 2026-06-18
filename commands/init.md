@@ -121,6 +121,9 @@ milestone:
 display:
   today_suggested_limit: 5
   date_format: "%Y-%m-%d"
+  # show_assignee: true        # render @login before title in /solo:today and /solo:plan
+                               # default: auto — on when ≥1 open issue has an assignee, off otherwise
+                               # set explicitly (true/false) to override the auto-detect
 ```
 
 Create `.solo/` directory if missing.
