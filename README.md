@@ -41,7 +41,6 @@ In Claude Code:
 /solo:capture "fix login redirect bug"       # captures to Inbox as type:bug
 /solo:today                                  # see in-progress, suggested, blocked
 /solo:start 42                               # flip to in-progress + create branch
-/solo:note 42 "[decision] use JWT for mobile"
 /solo:test 42                                # walk the test plan, tick what passes
 /solo:done 42                                # close + record outcome
 ```
@@ -59,14 +58,8 @@ You don't need `/solo:init` to start capturing — `/solo:capture` works out of 
 | `/solo:workflow` | Run every planned issue end-to-end through an autonomous Workflow (start → implement → test → done + PR) | — |
 | `/solo:test` | Walk the test plan, run or verify each item, tick passed | `<issue#>` |
 | `/solo:done` | Record outcome + close + open a rich PR (Summary + AC + Test Plan + Notes); refuses on unticked AC/Test Plan unless `--force` | `<issue#> [--force]` |
-| `/solo:note` | Append a timestamped note | `<issue#> "text"` |
-| `/solo:block` | Mark blocked with a reason | `<issue#> "reason"` |
-| `/solo:unblock` | Resume a blocked task | `<issue#> ["resolution"]` |
 | `/solo:plan` | Triage the Inbox into planned work | — |
-| `/solo:plan milestone` | Manage milestones (list, create, current, close) | `<action> [name]` |
 | `/solo:release` | Tag from trunk, generate notes, close milestone | `[--dry-run]` |
-| `/solo:week` | Past 7 days summary | — |
-| `/solo:status` | Project snapshot | — |
 | `/solo:init` | Idempotent setup (labels + config) | — |
 | `/solo:cleanup` | Sweep stale local branches + worktrees whose issue is closed / PR was merged | — |
 
@@ -76,7 +69,7 @@ You don't need `/solo:init` to start capturing — `/solo:capture` works out of 
 - **Status** is mutually exclusive via `status:inbox`, `status:planned`, `status:in-progress`, `status:blocked`, `status:done` (the last one also closes the issue).
 - **Type** is one of `type:feature`, `type:bug`, `type:task`, `type:idea`, `type:research`.
 - **Priority** is `priority:high|medium|low`. **Size** is `size:xs|s|m|l|xl`. Set during `/solo:plan`.
-- **Decisions** are notes prefixed `[decision]` — posted as comments and mirrored into the issue body's `## Notes` section so they stay parseable.
+- **Decisions** are lines prefixed `[decision]` in the issue body's `## Notes` section — write them directly (issue comment or body edit) and they survive into the PR body verbatim through `/solo:done`.
 
 ### Status stays in sync when PRs auto-close issues
 
@@ -165,10 +158,6 @@ display:
 
 No secrets — auth is entirely via `gh`.
 
-## Natural-language mode
-
-A bundled skill (`solo-assistant`) lets Claude proactively suggest the right `/solo:*` command when you talk about tasks in plain English ("I should add dark mode", "what's next", "done with #45"). It always confirms before mutating GitHub state.
-
 ## Trunk-based development
 
 solo assumes [trunk-based development](https://trunkbaseddevelopment.com/) — a single long-lived `trunk` branch (`main` by default) and short-lived, small feature branches that merge back fast. The plugin bakes the principles in:
@@ -213,11 +202,12 @@ solo treats a release as a **snapshot of trunk** — a git tag plus a GitHub Rel
 ### Flow
 
 ```
-/solo:plan milestone create "v0.4"     # open a new milestone, set as current
+# Open v0.4 in GitHub (web UI or `gh api`), then point .solo/config.yml
+# `milestone.current: "v0.4"` at it.
 /solo:capture "add dark mode"          # → attached to v0.4
 …
 /solo:release --dry-run                # preview the tag + notes
-/solo:release                          # tag, push, release, close v0.4, open v0.5
+/solo:release                          # tag, push, release, close v0.4
 ```
 
 `/solo:release` will:
@@ -253,7 +243,7 @@ With `required: false`, milestones are optional and `/solo:release` only warns a
 If you're upgrading an existing solo project:
 
 1. Re-run `/solo:init` — it adds the `release:` and `milestone:` config blocks without touching the rest.
-2. Create your first milestone: `/solo:plan milestone create v0.1`.
+2. Create your first milestone in GitHub (web UI or `gh api repos/<owner/repo>/milestones -f title="v0.1"`), then set `milestone.current: "v0.1"` in `.solo/config.yml`.
 3. Use `/solo:plan` to backfill milestones on existing open issues. Strict mode is on by default — `/solo:plan` will offer a backfill pass for anything missing a milestone.
 4. Flip `milestone.required: false` only if you'd rather skip the discipline (looser flow without releases).
 

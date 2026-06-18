@@ -80,7 +80,7 @@ gh api "repos/<owner/repo>/milestones?state=open" \
   --jq '.[] | select(.title=="<milestone.current>") | "\(.closed_issues)\t\(.open_issues + .closed_issues)"'
 ```
 
-If `milestone.current` is set but no matching open milestone exists, show `📦 <name> (missing — run /solo:plan milestone)` instead.
+If `milestone.current` is set but no matching open milestone exists, show `📦 <name> (missing — create it in GitHub and update milestone.current in .solo/config.yml)` instead.
 
 For the `[priority]` and `[size]` brackets in-line, use short forms: `high`/`med`/`low` and `xs`/`s`/`m`/`l`/`xl`. If a label is missing, render `-` (e.g. `[-][m]`).
 

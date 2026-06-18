@@ -119,8 +119,10 @@ If `milestone.current` is non-empty:
 
 - `milestone.required: true` (default) → block:
   ```
-  ❌ No active milestone. Set one with /solo:plan milestone create <name>,
-     or set milestone.required: false in .solo/config.yml to allow milestone-less issues.
+  ❌ No active milestone. Create one in GitHub (web UI or
+     `gh api repos/<owner/repo>/milestones -f title="<name>"`) and set
+     milestone.current in .solo/config.yml, or set milestone.required: false
+     in .solo/config.yml to allow milestone-less issues.
   ```
   Stop without creating the issue.
 - `milestone.required: false` → proceed without a milestone (no prompt — keep capture fast).
