@@ -35,10 +35,12 @@ Render a numbered list of inbox items with their current type:
 
 ```
 📋 Inbox (<count>):
-  [1] #<n> [<type>] <title>
-  [2] #<n> [<type>] <title>
+  [1] #<n> [<type>] @<login> <title>
+  [2] #<n> [<type>] @<login> <title>
   …
 ```
+
+**Assignee prefix:** between the `[type]` bracket and `<title>`, render the issue's assignees as `@<login>` (or `@a,@b` joined by commas for multiple, no spaces). Drop the prefix entirely (no `@?`, no placeholder) when the assignee array is empty. Rendering is gated by `display.show_assignee` — when the toggle is off, omit the prefix.
 
 Then ask the user once for a batch decision. Accept either:
 

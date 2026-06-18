@@ -63,17 +63,21 @@ Use this exact shape (omit a group entirely if empty; if all three are empty, pr
 📦 <milestone.current> (<closed>/<total> done)        ← only if milestone.current set
 
 In Progress (<count>):
-  #<n> [<priority>][<size>] <title>
+  #<n> [<priority>][<size>] @<login> <title>
   …
 
 Suggested Next (<count>):
-  #<n> [<priority>][<size>] <title>
+  #<n> [<priority>][<size>] @<login> <title>
   …
 
 Blocked (<count>):
   #<n> ⏸ <reason>
   …
 ```
+
+**Assignee prefix:** between the `[size]` bracket and `<title>`, render the issue's assignees as `@<login>` (or `@a,@b` joined by commas for multiple, no spaces). Drop the prefix entirely (no `@?`, no placeholder) when the assignee array is empty. The prefix appears only on **In Progress** and **Suggested Next** rows — Blocked rows keep the `⏸ <reason>` shape unchanged.
+
+Rendering is gated by `display.show_assignee` (see step 1). When the toggle is off, omit the prefix everywhere.
 
 For the milestone progress line, fetch counts via:
 
