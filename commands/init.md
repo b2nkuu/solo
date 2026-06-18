@@ -127,7 +127,52 @@ Create `.solo/` directory if missing.
 
 If `.solo/config.yml` already exists but is missing the `release:` or `milestone:` blocks (older installs), append the missing blocks in place — do not rewrite the rest of the file.
 
-### 5. Initial milestone
+### 5. Ensure `.gitignore` lists solo-local directories
+
+For each entry in the [Managed `.gitignore` lines](#managed-gitignore-lines) list above, ensure the line is present in the repo's `.gitignore`. This step is **purely additive** — never delete or rewrite existing lines.
+
+Algorithm (run once per managed line, in list order):
+
+1. **No file** — if `.gitignore` does not exist, create it. Write each managed line on its own line, separated by `\n`, and end the file with a trailing newline. Record each line's state as `added`.
+2. **File exists, line already present** — if the file contains the managed line as an **exact full-line match** (i.e. `grep -Fxq -- "<line>" .gitignore`), do nothing for that line. Record state `kept`.
+3. **File exists, line missing** — append the missing line. Before appending, ensure the file ends with a newline (if the final byte is not `\n`, append one first so the new entry lands on its own line). Then append `<line>\n`. Record state `appended`. Preserve all existing content byte-for-byte.
+
+When every managed line is already present, the file must not be rewritten at all (no whitespace churn, no reordering). Two consecutive `/solo:init` runs on the same repo must leave `.gitignore` byte-identical after the first run.
+
+Reference shell sketch (the skill may use any equivalent that satisfies the rules above):
+
+```bash
+managed_lines=(
+  ".solo/worktrees/"
+)
+
+declare -A gitignore_state   # line → added|appended|kept
+
+if [ ! -f .gitignore ]; then
+  : > .gitignore
+  for line in "${managed_lines[@]}"; do
+    printf '%s\n' "$line" >> .gitignore
+    gitignore_state["$line"]="added"
+  done
+else
+  for line in "${managed_lines[@]}"; do
+    if grep -Fxq -- "$line" .gitignore; then
+      gitignore_state["$line"]="kept"
+    else
+      # ensure trailing newline before appending
+      if [ -s .gitignore ] && [ "$(tail -c1 .gitignore | wc -l)" -eq 0 ]; then
+        printf '\n' >> .gitignore
+      fi
+      printf '%s\n' "$line" >> .gitignore
+      gitignore_state["$line"]="appended"
+    fi
+  done
+fi
+```
+
+The `gitignore_state` map feeds the final summary (see step 7).
+
+### 6. Initial milestone
 
 Default: create one milestone named after `release.initial_version` (e.g. `v0.1.0`).
 
@@ -145,7 +190,7 @@ If skipped, set `milestone.current: ""` in the config so other commands know the
 
 If multiple names were given (comma-separated), create each; set `milestone.current` to the first one.
 
-### 6. Confirm
+### 7. Confirm
 
 ```
 ✅ solo initialized for <owner/repo>
