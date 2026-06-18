@@ -7,6 +7,16 @@ allowed-tools: [Bash]
 
 One-time, idempotent setup for a project: create the label taxonomy and write `.solo/config.yml`.
 
+## Managed `.gitignore` lines
+
+Solo writes a small set of local directories that should never be tracked. The list below is the **single source of truth** — to teach `/solo:init` about a new solo-local directory in the future, add one line here and the gitignore step picks it up automatically.
+
+```
+.solo/worktrees/
+```
+
+Each entry is matched against `.gitignore` by **exact line equality** (not substring). New entries must be added one per line, with no leading/trailing whitespace and no trailing comment.
+
 ## Steps
 
 ### 1. Pre-flight
