@@ -55,6 +55,7 @@ You don't need `/solo:init` to start capturing — `/solo:capture` works out of 
 | `/solo:capture` | Capture a task or idea to the Inbox | `"text"` |
 | `/solo:today` | Show today's focus list | — |
 | `/solo:start` | Mark in-progress + create branch (single issue) | `<issue#> [--force]` |
+| `/solo:fast-track` | Capture + plan + start in one shot (size:xs / size:s only) | `"<title>" [<priority> <size>]` |
 | `/solo:workflow` | Run every planned issue end-to-end through an autonomous Workflow (start → implement → test → done + PR) | — |
 | `/solo:test` | Walk the test plan, run or verify each item, tick passed | `<issue#>` |
 | `/solo:done` | Record outcome + close + open a rich PR (Summary + AC + Test Plan + Notes); refuses on unticked AC/Test Plan unless `--force` | `<issue#> [--force]` |
@@ -95,6 +96,20 @@ The sections stay parseable Markdown checkboxes, so the issue page on GitHub dou
 - `[b]reakdown` — generate 2–4 sub-issue proposals from the parent's `## What`, create the ones you pick as `status:planned` (with `Split from #<parent>` in their Notes), and optionally close the parent. The new sub-issues feed straight into the same AC + test plan pass as the originals.
 
 This keeps the trunk-based rule "short-lived branches only" honest without adding a separate epic concept.
+
+### Fast-track (xs/s only)
+
+For truly trivial chores — a one-line version bump, a typo fix, a config tweak — the three-step `capture → plan → start` ceremony costs more than the work. `/solo:fast-track` collapses all three into one call:
+
+```
+/solo:fast-track "bump plugin.json to 2026.06.14" high xs
+```
+
+Result: a `type:task` issue created with `priority:high`, `size:xs`, and `status:in-progress` applied in a single labels call (no `status:inbox` intermediate), and the `chore/<n>-bump-plugin-json-to-2026-06-14` branch checked out off trunk. No AC/Test Plan generation prompt — the title is the acceptance criterion. Add detail mid-flight with `/solo:note <n> "..."` if needed.
+
+- Args: `"<title>" [<priority> <size>]`. Defaults are `medium s` when omitted. Defaults never recover from a malformed arg — supply both or neither.
+- Hard-scoped to `size:xs` / `size:s`. `size:m`, `size:l`, and `size:xl` are rejected with a one-liner pointing at `/solo:capture` + `/solo:plan`, so design pressure on larger work is preserved.
+- All `/solo:start` preflight guards (dirty working tree, trunk out of sync, branch already exists) still fire — and they fire *before* issue creation, so a rejection never leaves an orphan issue behind.
 
 ### Autonomous workflow
 
