@@ -196,7 +196,14 @@ If multiple names were given (comma-separated), create each; set `milestone.curr
 ✅ solo initialized for <owner/repo>
    labels: 18 created/updated
    config: .solo/config.yml
+   .gitignore: <added|appended|kept>  →  .solo/worktrees/
    milestone: <name> (current)
 ```
+
+Print **one `.gitignore:` line per managed entry**, in the order they appear in the [Managed `.gitignore` lines](#managed-gitignore-lines) list. The state token is whichever of `added`, `appended`, or `kept` was recorded for that entry in step 5:
+
+- `added` — the file did not exist and was created with this line.
+- `appended` — the file existed and this line was appended.
+- `kept` — the line was already present; no change.
 
 Drop the milestone line if none was created.
