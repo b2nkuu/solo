@@ -107,6 +107,14 @@ and re-prompt for the same section. Do not edit the body and do not advance to t
 
 If the batch input is empty, proceed to step 4a–4c for this section. If a non-empty input is accepted, hold the parsed decision in memory (the apply rules live in step 4-batch-apply / 4-batch-fail) and skip 4a–4c for this section.
 
+#### 4-batch-apply. Apply `all:m` and `all:s`
+
+When the batch decision for a section is `all:m`, record the per-item tuples directly without prompting: every index `i` in the section becomes `(section, i, pass)`. Step 5 will then rewrite every `- [ ] ` to `- [x] ` in that section's block in a single body edit. The Notes line in step 6 collects this as `<N> pass / 0 fail / 0 skip` for the section (using the AC/TP combined format described in step 6 when both sections are walked).
+
+When the batch decision is `all:s`, record every index `i` as `(section, i, skip)`. Step 5 makes **no body changes** to that section's block — every tick stays exactly as it was. The Notes line in step 6 collects this as `0 pass / 0 fail / <N> skip` for the section.
+
+Neither mode prompts the user further for this section; both feed straight into the same batched body write as the walk path.
+
 #### 4-walk. Walk items one at a time
 
 If the batch step returned empty for this section, walk it one at a time. For each item, do steps 4a–4c. The prompt header in 4b should clarify which section the item belongs to.
@@ -165,9 +173,11 @@ In memory, hold a tuple `(section, index, decision, note?)` for each item — `s
 
 Fetch the body, rewrite **both** the `## Acceptance` block and the `## Test Plan` block in place (only the sections that were walked):
 
-- For every item the walk marked `pass` (whether by `r` exit 0 or `m`), change `- [ ] ` to `- [x] ` in its own section.
+- For every item marked `pass` (whether by walk `r` exit 0, walk `m`, or batch `all:m`), change `- [ ] ` to `- [x] ` in its own section.
 - For `fail`, force the item to `- [ ] ` in its own section (untick it even if it was previously ticked — failing now is the truth).
-- For `skip`, leave the line unchanged.
+- For `skip` (whether walked `s` or batch `all:s`), leave the line unchanged.
+
+For `all:s`, the entire section block is unchanged — no body edit at all for that section.
 
 A failed AC item unticks the AC line; a failed TP item unticks the TP line. Never cross sections — index `2` in AC and index `2` in TP are independent.
 
