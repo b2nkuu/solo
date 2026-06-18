@@ -81,11 +81,25 @@ git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/orig
 
 Use the detected name as `trunk.name`.
 
+Then ask for the discussion language used in issues + PR bodies:
+
+```
+Discussion language for issues + PR bodies? [english/thai/...] (enter to default to english):
+```
+
+Accept any freeform string (e.g. `english`, `thai`, ISO-639-1 codes like `en`, `th`, or a longer phrase). Trim whitespace. If the user presses enter without input, default to `english`. Write the value as `language: "<value>"` at the top level of the config (see template below).
+
+The downstream skills (`/solo:plan`, `/solo:done`) read this field to decide what language to generate user-facing prose in. Section headings (`## What`, `## Acceptance`, `## Test Plan`, `## Notes`) stay in English regardless — they are parsed by solo itself.
+
 ```yaml
 # solo configuration
 version: 1
 
 repo: "<owner/repo>"
+
+# Discussion language for generated prose (AC + Test Plan items, PR Summary).
+# Section headings stay English regardless. Default: "english".
+language: "<chosen-language-or-english>"
 
 defaults:
   inbox_label: "status:inbox"
@@ -128,7 +142,7 @@ display:
 
 Create `.solo/` directory if missing.
 
-If `.solo/config.yml` already exists but is missing the `release:` or `milestone:` blocks (older installs), append the missing blocks in place — do not rewrite the rest of the file.
+If `.solo/config.yml` already exists but is missing the `release:`, `milestone:`, or `language:` field (older installs), append the missing entries in place — do not rewrite the rest of the file. For `language:`, ask the prompt above when the field is absent; insert the line near the top of the file (after `repo:`) so it's easy to find.
 
 ### 5. Ensure `.gitignore` lists solo-local directories
 
