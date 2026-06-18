@@ -22,8 +22,10 @@ Also offers a backfill pass for legacy issues missing a milestone (step 8) when 
 ```bash
 gh issue list --repo <owner/repo> --state open \
   --label "status:inbox" --limit 100 \
-  --json number,title,labels
+  --json number,title,labels,assignees
 ```
+
+`assignees` is an array of objects; the `.login` of each entry is used by the renderer in step 3 to prefix the title (see `display.show_assignee` config). An empty array means unassigned.
 
 If empty: print `📭 Inbox is empty.` and stop.
 

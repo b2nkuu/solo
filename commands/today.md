@@ -21,8 +21,10 @@ One call, then group in memory:
 
 ```bash
 gh issue list --repo <owner/repo> --state open --limit 200 \
-  --json number,title,labels,body,milestone
+  --json number,title,labels,body,milestone,assignees
 ```
+
+`assignees` is an array of objects; the `.login` of each entry is what we render in step 6. An empty array means unassigned.
 
 ### 3. Group by status
 
