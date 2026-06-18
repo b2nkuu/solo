@@ -30,6 +30,7 @@ Anything else after the issue number → warn `⚠ unknown flag: <token> (ignore
 
 - `gh auth status` (stop on failure).
 - Resolve repo as usual.
+- Read `.solo/config.yml`: `language:` (string, default `english` when unset or missing). This drives the language of the PR body's `## Summary` block in step 8 — see the appendix's "Summary synthesis" section for the exact rule.
 
 ### 2. Fetch issue
 
@@ -279,6 +280,10 @@ Fallback when sources are sparse:
 Note: the most recent `[done]` (from `/solo:done` step 4) or `[workflow]` (from `/solo:workflow` Stage E) line is part of the verbatim Notes copy, **not** the Summary. Don't double-render them.
 
 Keep the paragraph **under ~120 words**. Never invent scope that isn't in the issue body — Wabi-Sabi: ship what's true, don't fabricate.
+
+**Language.** Generate the Summary paragraph in the `language:` configured in `.solo/config.yml` (default `english` when unset). Technical English terms — file paths, identifiers, command names, issue numbers, the `Closes #<n>` line, the `## Summary` heading itself — stay verbatim and are never translated. The `## Acceptance`, `## Test Plan`, and `## Notes` blocks are copied **verbatim** from the issue body — their language is whatever was written there, and `language:` does not retranslate them. Only the Summary paragraph itself is generated fresh and therefore subject to `language:`.
+
+When the fallback path triggers (no `## What` content → Summary is the issue title used verbatim), the title is preserved exactly — `language:` does not translate it. This matches the title-preservation rule already stated above for non-English scripts.
 
 ### Recognised `## Notes` tags
 
