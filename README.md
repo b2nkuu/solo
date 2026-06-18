@@ -78,6 +78,13 @@ You don't need `/solo:init` to start capturing — `/solo:capture` works out of 
 - **Priority** is `priority:high|medium|low`. **Size** is `size:xs|s|m|l|xl`. Set during `/solo:plan`.
 - **Decisions** are notes prefixed `[decision]` — posted as comments and mirrored into the issue body's `## Notes` section so they stay parseable.
 
+### Status stays in sync when PRs auto-close issues
+
+When a PR with `Closes #<n>` merges, GitHub closes the issue but leaves the `status:*` label alone — so `status:in-progress` (or `status:blocked`) sticks around and the closed issue keeps showing up in `/solo:today` and `/solo:status` buckets it doesn't belong in. solo handles this two ways:
+
+- **`/solo:done <n>` detects already-closed issues** — if the issue is already `CLOSED` when you run `/solo:done`, the command skips the close call but still swaps any existing `status:*` label to `status:done`. Safe when no `status:*` label is present.
+- **Optional GitHub Actions workflow** — drop [`examples/workflows/solo-auto-flip-status.yml`](./examples/workflows/solo-auto-flip-status.yml) into your repo's `.github/workflows/` to flip the label automatically on every `issues.closed` event. Useful when you sometimes merge a PR and walk away without running `/solo:done`.
+
 ## Acceptance & Test Plan
 
 Every issue body has an `## Acceptance` and `## Test Plan` section. They start blank from `/solo:capture` and stay out of your way until you're ready to think about the work.

@@ -1,0 +1,105 @@
+# solo-auto-flip-status.yml
+#
+# Drop this file into your repo at `.github/workflows/solo-auto-flip-status.yml`
+# to keep solo's `status:*` labels honest when issues are auto-closed by a PR's
+# `Closes #<n>` keyword.
+#
+# Problem this solves:
+#   GitHub closes the linked issue when a PR merges, but the `status:*` label
+#   is sticky — `status:in-progress` (or `status:blocked`) survives the close.
+#   `/solo:today` and `/solo:status` filter by labels, so until someone manually
+#   swaps the label the closed issue lingers in stale buckets and the audit
+#   trail lies about what really happened.
+#
+# What this workflow does:
+#   On every `issues.closed` event, find any `status:*` label other than
+#   `status:done`, remove it, and add `status:done`. Idempotent — re-running on
+#   an issue already at `status:done` is a no-op.
+#
+#   This is the optional second half of the fix shipped in `/solo:done`'s
+#   detect-and-flip path: `/solo:done` covers the case where you remember to
+#   run it, this workflow covers the case where you just merge the PR and walk
+#   away.
+#
+# Permissions:
+#   `issues: write` is required to edit labels. `pull-requests: read` is not
+#   strictly required (the workflow does not inspect PRs) but is harmless.
+#
+# Manual trigger:
+#   `workflow_dispatch` is included for one-off fixups on a specific issue —
+#   handy after you adopt the workflow and want to sweep historically closed
+#   issues that still carry `status:in-progress`.
+
+name: solo — auto-flip status on close
+
+on:
+  issues:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to fix up (workflow_dispatch only)"
+        required: true
+        type: string
+
+permissions:
+  issues: write
+
+jobs:
+  flip-status:
+    name: Swap status:* → status:done
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve issue number
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "number=${{ inputs.issue_number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Flip status label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ steps.resolve.outputs.number }}
+        run: |
+          set -euo pipefail
+
+          # Fetch current labels.
+          LABELS=$(gh issue view "$NUMBER" --repo "$REPO" --json labels --jq '[.labels[].name]')
+          echo "current labels: $LABELS"
+
+          # Find the first status:* label that isn't status:done. There should
+          # be at most one — solo treats status as mutually exclusive — but we
+          # remove every non-done status:* defensively.
+          NON_DONE=$(echo "$LABELS" | jq -r '.[] | select(startswith("status:") and . != "status:done")')
+
+          # Already at status:done (or has no status:* at all) → nothing to remove.
+          HAS_DONE=$(echo "$LABELS" | jq -r 'any(. == "status:done")')
+
+          if [ -z "$NON_DONE" ] && [ "$HAS_DONE" = "true" ]; then
+            echo "already status:done — no-op"
+            exit 0
+          fi
+
+          # Ensure the label exists in this repo (cheap, idempotent).
+          gh label create "status:done" --color "cccccc" --force --repo "$REPO" >/dev/null
+
+          # Remove every non-done status:* label.
+          if [ -n "$NON_DONE" ]; then
+            while IFS= read -r LABEL; do
+              [ -z "$LABEL" ] && continue
+              echo "removing $LABEL"
+              gh issue edit "$NUMBER" --repo "$REPO" --remove-label "$LABEL"
+            done <<< "$NON_DONE"
+          fi
+
+          # Add status:done if not already present.
+          if [ "$HAS_DONE" != "true" ]; then
+            echo "adding status:done"
+            gh issue edit "$NUMBER" --repo "$REPO" --add-label "status:done"
+          fi
+
+          echo "done — issue #$NUMBER flipped to status:done"

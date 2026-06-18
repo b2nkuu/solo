@@ -37,7 +37,15 @@ Anything else after the issue number → warn `⚠ unknown flag: <token> (ignore
 gh issue view <n> --repo <owner/repo> --json number,title,body,labels,state
 ```
 
-If already closed → `ℹ️  #<n> already closed.` and stop.
+If already closed (state is `CLOSED`) — typically because a merged PR with `Closes #<n>` auto-closed it — **do not stop**. The status label is sticky and almost certainly still reads `status:in-progress` (or `status:blocked`), which leaves the issue showing up in `/solo:today` and `/solo:status` buckets that should be empty for closed work. Instead:
+
+- Skip step 7 (the close call) — the issue is already closed.
+- Still run step 6 (flip status to `status:done`) — this is the whole point of detect-and-flip.
+- Steps 3–5 (outcome prompt, body edits, metadata) are also skipped: the user is fixing up state on a PR-closed issue, not finishing the work manually. Closing was already recorded by the PR merge, and re-prompting for an outcome on something they already shipped is friction.
+- Skip step 8 (PR offer) — a PR already closed this issue, by definition.
+- Print a short note in step 9: `ℹ️  #<n> was already closed (PR auto-close). Flipped status:* → status:done.`
+
+In short: detect already-closed → jump straight to step 6, then step 9. The rest of the flow is for issues that are still open when `/solo:done` runs.
 
 ### 3. Confirm final tick state + ask for outcome (optional)
 
@@ -133,13 +141,24 @@ Ensure label exists:
 gh label create "status:done" --color "cccccc" --force --repo <owner/repo>
 ```
 
-Remove the current `status:*` label and add `status:done`:
+Inspect the labels fetched in step 2 and find any existing `status:*` label (there should be at most one). Two branches:
 
-```bash
-gh issue edit <n> --repo <owner/repo> \
-  --remove-label "<current status:* if any>" \
-  --add-label "status:done"
-```
+- **A current `status:*` label exists** (e.g. `status:in-progress`, `status:blocked`, `status:planned`, `status:inbox`) and it is not already `status:done` — swap it:
+
+  ```bash
+  gh issue edit <n> --repo <owner/repo> \
+    --remove-label "<current status:*>" \
+    --add-label "status:done"
+  ```
+
+- **No `status:*` label is present**, or the only one is already `status:done` — skip the remove (passing `--remove-label` for a label that isn't on the issue makes `gh` error out). Just ensure `status:done` is on:
+
+  ```bash
+  gh issue edit <n> --repo <owner/repo> \
+    --add-label "status:done"
+  ```
+
+This branch matters for the detect-and-flip path from step 2 (a PR-closed issue might still have `status:in-progress`, or might already have been hand-fixed to `status:done`), and also keeps the normal-close path robust when an issue somehow has no status label.
 
 ### 7. Close the issue
 
