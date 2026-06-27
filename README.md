@@ -183,7 +183,7 @@ solo assumes [trunk-based development](https://trunkbaseddevelopment.com/) — a
 - **Short-lived branches.** Target ≤ 2 days. `/solo:today` warns when an in-progress task is older than `trunk.max_branch_age_days` (configurable).
 - **Small scope.** `/solo:plan` and `/solo:start` flag `size:xl` and suggest breakdown before work begins.
 - **Ship fast.** `/solo:done` offers to push the branch and open a PR back to trunk in one step.
-- **One issue → one branch → one PR.** No bundling of unrelated work.
+- **One issue → one branch → one PR.** No bundling of unrelated work. `/solo:today` warns with a soft `⚠` when the current branch's commits look drifted from the issue it's named for (zero title-keyword overlap, or a commit referencing a different `#issue`).
 - **Feature flags > long branches.** For multi-week work, gate behind a flag and keep merging to trunk.
 
 Configure the trunk name and branch-age threshold in `.solo/config.yml`:
