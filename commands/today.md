@@ -142,3 +142,27 @@ If the stale count is ≥ 3, append at the bottom of the output:
 Skip the hint entirely when the count is < 3. Three matches the threshold used for the milestone hygiene soft hint — small handfuls aren't worth surfacing; larger pools are.
 
 This count is a **superset** of what `/solo:cleanup` will actually delete. `/solo:cleanup` additionally checks PR state (a branch whose issue is closed but whose PR is still open stays in cleanup's `active` group) and skips dirty worktrees. `/solo:today`'s hint is intentionally lossy — its job is the nudge, not the final word.
+
+### 10. Branch-scope drift warning (trunk-based)
+
+After the stale-local-branches hint, run one last **read-only, local-only** check: does the work on the *currently checked-out* branch look like it has drifted from the issue the branch is named for? This is the "started coding issue A on a branch named for issue B" nudge — never blocking, same class as steps 7–9, and intentionally lossy (false positives should be cheap to ignore).
+
+Only the **current** branch is inspected — solo does not walk every In Progress issue's branch. That keeps the step O(1): a single `git log` / `git diff` pair, no extra GitHub API calls beyond step 2.
+
+1. `git branch --show-current`. If empty (detached HEAD) or equal to `trunk.name` → skip silently.
+2. Extract `<issue>` from the branch name by regex-parsing it against `branch.pattern` (same translation as step 9: `{prefix}` → `[a-z]+`, `{issue}` → `(\d+)`, `{slug}` → `.+`, anchored `^…$`). No match (a branch created outside `/solo:start`) → skip silently.
+3. The extracted `<issue>` must be one of the **In Progress** issues grouped in step 3. If it isn't (e.g. the branch is for a planned or already-closed issue), skip — the drift line surfaces under the In Progress group only, matching the issue's chosen surface point.
+4. Gather the branch's work relative to trunk:
+   - Commit subjects: `git log <trunk.name>..HEAD --format='%s'`. Subjects only — commit **bodies** are intentionally not scanned, so a body line like `relates to #12` or `see #9` never trips the drift check.
+   - Changed paths: `git diff --name-only <trunk.name>...HEAD`.
+   - If there are **zero commits** (fresh branch, nothing committed yet) → skip silently. Nothing has drifted yet, and the `git` calls must not error on an empty range.
+5. Raise the warning if **either** signal trips:
+   - **Commit-trailer drift:** scan the commit **subject lines** (not bodies) for `#<num>` references — typically a squash-merge suffix `(#n)` or a `Closes/Fixes #n` written on the subject. If any subject references an issue number other than `<issue>` (the branch's own issue) → drift. Body mentions are excluded so legitimate cross-references (`relates to #12`) don't raise a false positive on aligned work.
+   - **Scope-overlap miss:** build the keyword set from the issue **title plus the first non-empty line of its `## What` section** (the body is already in hand from step 2 — no extra fetch). Tokenize both (lowercase, split on non-alphanumeric, drop tokens shorter than 3 chars and common stopwords like `the`, `and`, `for`, `when`). Pulling in `## What` widens "scope" beyond the title alone, so a branch whose work matches the described scope but reuses none of the title's exact words still counts as aligned. If **zero** of those keywords appears in any commit subject **or** any changed file path → drift. Zero overlap is the deliberately conservative trigger; *any* partial overlap counts as aligned, so a branch that touches even one on-topic file or word never warns. This keeps false positives rare and cheap, per the issue's "false positives should be cheap to ignore."
+6. On drift, append one soft line directly under the In Progress group (alongside the issue's row), consistent in shape with the step 7 stale-branch warning:
+
+```
+  ⚠ #<n> branch work may have drifted from issue scope — verify or re-home
+```
+
+No drift, no line — silence is the aligned-work signal. This step never modifies anything; re-homing commits is left to the user (a future `/solo:start` / manual rebase), matching the read-only contract of every other `/solo:today` nudge.
