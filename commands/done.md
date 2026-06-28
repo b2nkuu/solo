@@ -255,7 +255,7 @@ Every section appears **only when non-empty after rendering**:
 - `## Notes` — copy the issue's `## Notes` block verbatim with two strip operations applied **only** to the bottom of the section:
   1. Remove a trailing `---` line if it is the **last non-blank line**.
   2. Remove a trailing `<!-- solo:metadata … -->` HTML comment if it is the last non-blank block (the comment itself spans multiple lines — strip the whole opening-to-closing comment).
-  A `---` or `<!-- … -->` that appears anywhere **above** the trailing block is preserved verbatim (a user may have intentionally pasted one inside a `[decision]` line). If the resulting section has no remaining non-blank lines, omit the `## Notes` heading from the PR body entirely. Preserve every other line including the timestamped `[test]` / `[done]` / `[done-forced]` / `[workflow]` / `[approach]` / `[decision]` / `[blocked]` entries — that audit trail is the whole point.
+  A `---` or `<!-- … -->` that appears anywhere **above** the trailing block is preserved verbatim (a user may have intentionally pasted one inside a `[decision]` line). If the resulting section has no remaining non-blank lines, omit the `## Notes` heading from the PR body entirely. Preserve every other line including the timestamped `[test]` / `[done]` / `[done-forced]` / `[workflow]` / `[approach]` / `[decision]` / `[blocked]` / `[retro]` entries — that audit trail is the whole point.
 
 Do **not** insert section headings that have no content.
 
@@ -298,5 +298,6 @@ These bracketed tags carry meaning across solo commands. Spelled here so produce
 | `[approach]` | `/spirit:implement` Phase 5, or a manual comment / `## Notes` edit | yes | One-line description of the chosen approach, consumed by the Summary synthesis above |
 | `[blocked]` | Manual — applied directly to the issue when work stalls | yes | Reason the issue was blocked |
 | `[decision]` | Manual comment / `## Notes` edit | yes | A decision worth preserving in the body, not just the comment thread |
+| `[retro]` | `/solo:retro` step 6 (opt-in) | yes | Per-issue reflect stamp (`cycle <X>d · <B> blocked · <F> forced`) |
 
 Every tag in the table lands in the body's `## Notes` section by design, so all of them survive the verbatim copy into the PR body. A line that does not start with a bracketed tag is fine — it just doesn't get special treatment by the synthesis logic above.
