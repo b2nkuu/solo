@@ -59,6 +59,7 @@ You don't need `/solo:init` to start capturing — `/solo:capture` works out of 
 | `/solo:test` | Walk the test plan, run or verify each item, tick passed | `<issue#>` |
 | `/solo:done` | Record outcome + close + open a rich PR (Summary + AC + Test Plan + Notes); refuses on unticked AC/Test Plan unless `--force` | `<issue#> [--force]` |
 | `/solo:plan` | Triage the Inbox into planned work | — |
+| `/solo:retro` | Reflect on closed work — cycle time + rework from issue metadata | `[<milestone> \| --since <date> \| --last <N>]` |
 | `/solo:release` | Tag from trunk, generate notes, close milestone | `[--dry-run]` |
 | `/solo:init` | Idempotent setup (labels + config) | — |
 | `/solo:cleanup` | Sweep stale local branches + worktrees whose issue is closed / PR was merged | — |
@@ -88,6 +89,21 @@ Every issue body has an `## Acceptance` and `## Test Plan` section. They start b
 - **At close time.** `/solo:done` lists every remaining unticked checklist item alongside the outcome prompt and offers `Tick all? [Y/edit/n]` — the common "everything done" case is one keystroke; `edit` lets you tick a subset per section. If any AC or Test Plan item is still `- [ ]` after the prompt, `/solo:done` refuses to close — "closed" means the work and its verification both completed. Pass `--force` to override (e.g. an AC item that has genuinely gone obsolete); the slip is recorded in `## Notes` as `[done-forced]`.
 
 The sections stay parseable Markdown checkboxes, so the issue page on GitHub doubles as the audit trail for what was promised, what was tested, and what shipped.
+
+### Reflect (retro)
+
+`/solo:capture → plan → start → test → done` covers intent through ship. `/solo:retro` closes the loop by looking **backward** across work that already shipped — so the next planning round starts from evidence, not memory.
+
+It is read-only by default and invents no new data: it re-reads the `started` / `completed` metadata and the `[blocked]` / `[done-forced]` Notes that solo already wrote, then reports **cycle time** (per issue and averaged by size) and **rework signals** (how often work stalled or closed with items unticked). The closed Issues are the source of truth — no separate metrics store.
+
+```
+/solo:retro                       # default: current milestone, or the last 7 days
+/solo:retro v0.4                  # everything in a milestone
+/solo:retro --since 2026-06-20    # closed on or after a date
+/solo:retro --last 10             # the 10 most-recently-closed issues
+```
+
+Run it per week, per milestone, or just before `/solo:release`. The aggregate report is chat-only; an opt-in prompt can stamp each issue with a `[retro]` note recording its own cycle time, keeping the reflection on the issue where the rest of its audit trail lives.
 
 ### xl breakdown
 
