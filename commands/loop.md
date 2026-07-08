@@ -49,7 +49,18 @@ For a single issue you want to drive yourself, use `/solo:start <n>` instead. `/
     plan_model: sonnet           # optional model overrides
     implement_model: sonnet
     verify_model: haiku
+    auto_confirm: false          # true → skip the step 4 prompt (unattended); step 3 refusals still gate
+    max_issues_per_run: 5        # budget cap per run, independent of max_parallel
+    report_issue: "<n>"          # unattended: post each issue's summary as a comment here (fallback: stdout)
+  verify:
+    commands:                    # repo invariants run in every worktree during Stage D — exit 0 required for all
+      - "<lint/analyze cmd>"
+      - "<test cmd>"
   ```
+
+  **About `loop.auto_confirm` (unattended mode).** Default `false` — the step 4 confirm prompts as usual. Set `true` to run from a scheduler (`claude -p "/solo:loop"` via cron / GitHub Actions): step 4 skips the prompt entirely, but the step 3 refusals (empty list, `size:xl`, missing AC/Test Plan) remain hard gates that abort the batch. `auto_confirm` only removes the *human keypress*, never the safety checks.
+
+  **About `verify.commands` (hard verify gate).** Optional list of repo-invariant commands (lint, type-check, test) run inside each issue's worktree during Stage D, **in addition** to walking that issue's `## Test Plan`. Division of labour: `## Test Plan` = per-issue acceptance conditions; `verify.commands` = repo-wide invariants every change must satisfy. All commands must exit `0` or the round fails (same retry loop as a failed Test Plan item). Missing `verify:` config → current behaviour, and the summary marks the issue `verified (test-plan only)`. See Stage D for the `env-missing` fast-fail rule.
 
   **About `loop.max_parallel`:** this is the **script-level soft cap** — the upper bound the orchestrator asks the Workflow tool to honour when scheduling pipelines. It is **distinct** from the Workflow runtime's own hard ceiling, which is roughly `min(16, cores - 2)` and applied unconditionally by the runtime regardless of what the script requests. The effective concurrency is `min(loop.max_parallel, min(16, cores - 2), N)` where `N` is the source list size. Set `loop.max_parallel` low to throttle yourself below the runtime cap (e.g. on a small laptop, or to leave headroom for other tools). Setting it above the runtime cap has no effect — the runtime cap wins.
 
@@ -57,13 +68,23 @@ For a single issue you want to drive yourself, use `/solo:start <n>` instead. `/
 
 ```bash
 gh issue list --repo <owner/repo> --state open --limit 200 \
-  --json number,title,body,labels,milestone
+  --json number,title,body,labels,milestone,author
 ```
 
 Filter to issues that carry `status:planned`. Then:
 
 - If `milestone.current` is set → keep only issues whose `milestone.title == milestone.current`.
 - Otherwise → keep all planned issues.
+
+**Author filter (unattended safety rail).** Then keep only issues whose `author.login` is the repo owner or a repo collaborator — an unattended agent must never ingest instructions from a public-repo stranger's issue body. Resolve the allowed set once per run:
+
+```bash
+gh api "repos/<owner/repo>/collaborators?permission=push" --jq '.[].login'
+```
+
+Union that list with the repo owner. Drop any planned issue authored outside it and note the exclusion in the run summary (`excluded <k> issue(s): non-collaborator author`). `/solo:plan` is the human content gate; this filter is the mechanical backstop for the headless path. The filter applies in both modes, but it only matters when `auto_confirm: true` — an interactive run has a human at the step 4 prompt.
+
+**Budget cap.** After filtering, if the list is longer than `loop.max_issues_per_run` (default 5), keep the first `max_issues_per_run` by the same priority-then-size order `/solo:today` uses, and note the deferral in the summary (`capped at <max>: <k> planned issue(s) deferred to next run`). This bounds cost per unattended run independently of `max_parallel` (which caps concurrency, not total).
 
 ### 3. Refusals (before any mutation)
 
@@ -91,7 +112,9 @@ Every refusal aborts the whole batch — no partial flips, no partial branches, 
 
 ### 4. Confirm
 
-Show the batch and ask once:
+**When `loop.auto_confirm: true` (unattended): skip this step entirely** — print the batch block below for the log, then proceed straight to step 5 with no prompt. The step 3 refusals already gated the batch; the confirm keypress is the only thing `auto_confirm` removes.
+
+Otherwise (default), show the batch and ask once:
 
 ```
 🤖 /solo:loop — <N> issue(s):
@@ -158,17 +181,32 @@ If any step in Claim fails for a given issue, that issue's pipeline fails immedi
 
 #### Pipeline stage D — Verify agent
 
-`agent(prompt, { schema: VERIFY_SCHEMA, model: loop.verify_model })` invoked with `cwd: worktree_path`. Walks the issue body's `## Test Plan` items in the spirit of `/solo:test` — proposes a check per item, runs it via Bash inside the worktree, and returns:
+Verification has **two halves**, both required to pass a round: the per-issue Test Plan walk, then the repo-invariant hard-command gate.
+
+**D.1 — Test Plan walk.** `agent(prompt, { schema: VERIFY_SCHEMA, model: loop.verify_model })` invoked with `cwd: worktree_path`. Walks the issue body's `## Test Plan` items in the spirit of `/solo:test` — proposes a check per item, runs it via Bash inside the worktree, and returns:
 
 ```json
 { "results": [{ "index": 0, "passed": true, "evidence": "..." }] }
 ```
 
-Then the orchestrator decides:
+**D.2 — Hard verify gate (`verify.commands`).** After the Test Plan walk, if `verify.commands` is configured, the orchestrator runs the commands with `cwd: <worktree_path>` (arbitrary shell — lint, type-check, test — not git subcommands), in listed order.
 
-- **All passed** → continue to stage E (Done).
-- **Any failed** AND retry count < `loop.max_retries` → loop back to stage C with only the failing Test Plan indices in the implement prompt. Bump retry counter.
-- **Any failed** AND retry exhausted → pipeline fails with the unticked indices + last evidence.
+First, a **preflight resolvability probe**: for each configured command, check that its leading binary resolves (e.g. `command -v <bin>`). If any binary is unresolvable, the runner's toolchain is absent — fail the pipeline immediately with reason `env-missing` and the offending command, **without running anything and without burning a retry**. Retrying can't install a missing SDK; this is the one Stage D failure that skips the retry loop. Scoping the fast-fail to the preflight probe (not to "exit 127 anywhere") is deliberate: a `127` that surfaces *mid-run* — a sub-process the command itself invoked is missing — is a code/dependency bug the implement agent can fix, so it stays in the normal retry path below.
+
+Once every binary resolves, run the commands in order:
+
+- **Every command exits `0`** → the hard gate passes.
+- **Any command exits non-zero** (including a mid-run `127`) → the gate fails. Capture the last ~20 lines of that command's combined stdout/stderr as evidence. This counts as a **failed round** — same retry loop as a failed Test Plan item (D.3 below), so stage C gets another attempt.
+- **`verify.commands` unset** → skip D.2 entirely; the pipeline is verified on the Test Plan alone, and the summary marks the issue `verified (test-plan only)`.
+
+`## Test Plan` = per-issue acceptance conditions; `verify.commands` = repo-wide invariants. Both must be green for the round to pass.
+
+**D.3 — Round decision.** Combining D.1 and D.2:
+
+- **Test Plan all passed AND hard gate passed (or unset)** → continue to stage E (Done).
+- **Test Plan failure OR hard-gate non-zero exit** AND retry count < `loop.max_retries` → loop back to stage C with the failing Test Plan indices and/or the failing command's evidence in the implement prompt. Bump retry counter.
+- **Same** AND retry exhausted → pipeline fails with the unticked indices + last evidence (`status:blocked` per the failure shape below).
+- **`env-missing`** → immediate pipeline failure, no retry (see D.2).
 
 #### Pipeline stage E — Done + PR
 
@@ -194,14 +232,18 @@ If the PR call surfaces "a pull request already exists" (e.g. a previous failed 
 
 #### Pipeline failure shape
 
-Any stage failure returns `{ status: "red", issue: <n>, branch, worktree_path, reason, evidence }`. Failed pipelines leave the issue at `status:in-progress`, the worktree intact, and no PR — the user picks up manually from the worktree.
+Any stage failure returns `{ status: "red", issue: <n>, branch, worktree_path, reason, evidence }`. Failed pipelines leave the worktree intact and open no PR — the user picks up manually from the worktree. **The issue is flipped `status:in-progress` → `status:blocked`** (`gh label create status:blocked --force`; swap the labels) so `/solo:today` surfaces it in the Blocked bucket instead of leaving a silently-stuck in-progress issue. The `reason` + last `evidence` are also written as a `- <claimed_at>: [blocked] <stage>: <reason>` line under the issue's `## Notes`, matching the manual-block convention so the audit trail is uniform. (Re-run safety still holds: `status:blocked` is out of the `status:planned` source filter.)
+
+#### Pipeline persisted summary (unattended)
+
+Under `loop.auto_confirm: true`, each pipeline — green **or** red — posts its own one-issue summary as a comment on the issue named by `loop.report_issue` (the same green/red lines step 7 would print for that issue, including `rounds` and any `verified (test-plan only)` marker). If `loop.report_issue` is unset, fall back to stdout only. This is the headless equivalent of the human reading step 7's terminal output: a scheduled run leaves its trail on GitHub where the owner will see it, and the per-issue round count makes cost patterns visible in the report issue over time. Under interactive mode (`auto_confirm: false`) nothing is posted — step 7's printed summary is enough.
 
 ### 7. Summary
 
 After the Workflow returns, print a per-issue summary:
 
 ```
-🤖 /solo:loop finished — <P> green / <F> red
+🤖 /solo:loop finished — <P> green / <F> red — <T> total implement→verify rounds
 
 Green:
    #<n> <title>  →  PR <pr_url>  (worktree: <path>, <rounds> round(s))
@@ -217,20 +259,28 @@ Next:
 - For red issues: `cd <worktree>` (e.g. `cd .solo/worktrees/<n>`), fix, `/solo:test <n>`, `/solo:done <n>`. The worktree already has the right branch checked out — you don't `git switch` into anything.
 ```
 
+`<T>` is the sum of every pipeline's `rounds` (implement→verify attempts across the whole batch) — the headline cost signal. The same total rides along in the unattended per-issue comments posted to `loop.report_issue`, so cost patterns stay visible over successive scheduled runs.
+
 ### 8. Re-run safety
 
 `/solo:loop` is safe to re-run after partial failure:
 
 - Green issues are already `status:done` and closed → out of the source filter.
-- Red issues are `status:in-progress` → out of the source filter.
+- Red issues are `status:blocked` (flipped by the failure shape) → out of the source filter.
 - Only fresh `status:planned` issues get picked up.
 
-To retry a red issue end-to-end, manually flip it back: `gh issue edit <n> --remove-label status:in-progress --add-label status:planned`. The orchestrator will then create a new worktree (different branch suffix if the previous branch still exists) — you're expected to clean the old worktree yourself first with `git worktree remove`.
+To retry a red issue end-to-end, manually flip it back: `gh issue edit <n> --remove-label status:blocked --add-label status:planned`. The orchestrator will then create a new worktree (different branch suffix if the previous branch still exists) — you're expected to clean the old worktree yourself first with `git worktree remove`.
 
 ## Design constraints
 
 - **One worktree per issue, user-facing.** `.solo/worktrees/<n>/` is the canonical place — survives Workflow lifecycle, the user can `cd` into it, branches are real local branches not Workflow-runtime throwaways. The implement agent gets a `cwd` to that path; it does **not** use `isolation: 'worktree'`.
-- **Atomic claim, no rollback.** The status flip is the ownership token. We never try to "un-claim" on later failure — the issue stays `in-progress` with its worktree so the human can finish or recycle.
+- **Atomic claim, no rollback to `planned`.** The status flip is the ownership token. We never "un-claim" back to `status:planned` on failure — a failed pipeline flips `in-progress` → `status:blocked` (surfaced by `/solo:today`), keeping its worktree so the human can finish or recycle. The one thing we never do is silently drop the issue back into the source pool.
 - **No batch-level mutation before per-pipeline claim.** Refusals (step 3) check everything up front; if any pipeline fails after, the rest still run.
 - **Per-pipeline isolation, batch-level reporting.** One red pipeline does not abort the run. The summary surfaces every outcome with enough breadcrumbs (`worktree_path`, `pr_url`, failure stage) to pick up.
 - **Solo skill semantics, not new ones.** Pipeline stages mirror `/solo:start` + `/solo:test` + `/solo:done` behaviour. If those commands evolve, this command's stages should evolve with them — keep them in sync.
+- **Unattended removes the keypress, never the gates.** `auto_confirm: true` skips only the step 4 confirm. Step 3 refusals, the author filter, the `max_issues_per_run` cap, the hard verify gate, and the human merge gate (PRs, never a merge) all still apply — an unattended run is the interactive run minus one prompt, not minus its safety.
+
+## Non-goals
+
+- **Automating `/solo:plan`.** The loop never generates Acceptance or Test Plan content. That quality is the human judgment the loop's correctness rests on — `/solo:plan` stays a human step, and the author filter + `status:planned` gate mean only human-curated issues ever enter an unattended run.
+- **Changing the human merge gate.** Green pipelines push branches and open PRs; they never merge. Unattended mode must not gain merge rights — enable trunk branch protection so code lands only through a reviewed PR. In headless mode this is a mechanical guarantee, not a spec promise (see the README "Runner permissions" note).
