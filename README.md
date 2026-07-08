@@ -55,7 +55,7 @@ You don't need `/solo:init` to start capturing — `/solo:capture` works out of 
 | `/solo:today` | Show today's focus list | — |
 | `/solo:start` | Mark in-progress + create branch (single issue) | `<issue#> [--force]` |
 | `/solo:fast-track` | Capture + plan + start in one shot (size:xs / size:s only) | `"<title>" [<priority> <size>]` |
-| `/solo:loop` | Run every planned issue end-to-end through an autonomous Workflow (start → implement → test → done + PR) | — |
+| `/solo:loop` | Run every planned issue end-to-end autonomously (start → implement → test → done + PR) | — |
 | `/solo:test` | Walk the test plan, run or verify each item, tick passed | `<issue#>` |
 | `/solo:done` | Record outcome + close + open a rich PR (Summary + AC + Test Plan + Notes); refuses on unticked AC/Test Plan unless `--force` | `<issue#> [--force]` |
 | `/solo:plan` | Triage the Inbox into planned work | — |
@@ -145,7 +145,7 @@ One pipeline per issue, all in parallel (capped at `loop.max_parallel`, default 
 
 Refusals are up front: empty source list, any `size:xl` in the batch, or any issue missing AC / Test Plan → batch aborts before mutating anything. Per-pipeline failures are isolated — one red issue does not kill the others, the failed issue flips to `status:blocked` with its worktree intact (so `/solo:today` surfaces it), and the green pipelines still close + PR. To pick up a red issue, `cd .solo/worktrees/<n>/` (the branch is already checked out there — no `git switch` needed) and continue with `/solo:test` / `/solo:done`.
 
-`/solo:start <n>` (single-issue) is unaffected — it never runs a Workflow.
+`/solo:start <n>` (single-issue) is unaffected — it never fans out into parallel pipelines.
 
 #### Unattended mode
 

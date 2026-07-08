@@ -1,6 +1,6 @@
 ---
-description: Run every planned issue end-to-end through an autonomous Workflow (start → implement → test → done + PR)
-allowed-tools: [Bash, Workflow]
+description: Run every planned issue end-to-end autonomously (start → implement → test → done + PR)
+allowed-tools: [Bash, Task]
 ---
 
 # /solo:loop
@@ -43,7 +43,7 @@ For a single issue you want to drive yourself, use `/solo:start <n>` instead. `/
   milestone:
     current: "<name>"           # source filter
   loop:
-    max_parallel: 4              # script-level soft cap on concurrent pipelines (see note)
+    max_parallel: 4              # max concurrent implement/verify subagents (see note)
     max_retries: 3               # implement→verify loop cap per issue
     worktree_root: ".solo/worktrees"   # relative to repo root
     plan_model: sonnet           # optional model overrides
@@ -62,7 +62,7 @@ For a single issue you want to drive yourself, use `/solo:start <n>` instead. `/
 
   **About `verify.commands` (hard verify gate).** Optional list of repo-invariant commands (lint, type-check, test) run inside each issue's worktree during Stage D, **in addition** to walking that issue's `## Test Plan`. Division of labour: `## Test Plan` = per-issue acceptance conditions; `verify.commands` = repo-wide invariants every change must satisfy. All commands must exit `0` or the round fails (same retry loop as a failed Test Plan item). Missing `verify:` config → current behaviour, and the summary marks the issue `verified (test-plan only)`. See Stage D for the `env-missing` fast-fail rule.
 
-  **About `loop.max_parallel`:** this is the **script-level soft cap** — the upper bound the orchestrator asks the Workflow tool to honour when scheduling pipelines. It is **distinct** from the Workflow runtime's own hard ceiling, which is roughly `min(16, cores - 2)` and applied unconditionally by the runtime regardless of what the script requests. The effective concurrency is `min(loop.max_parallel, min(16, cores - 2), N)` where `N` is the source list size. Set `loop.max_parallel` low to throttle yourself below the runtime cap (e.g. on a small laptop, or to leave headroom for other tools). Setting it above the runtime cap has no effect — the runtime cap wins.
+  **About `loop.max_parallel`:** how many implement/verify `Task` subagents may run concurrently. The orchestrator keeps at most `loop.max_parallel` in flight as a **sliding window** — it fills up to the cap, and as soon as **any** one finishes it dispatches the next waiting issue, so effective concurrency is `min(loop.max_parallel, N)` where `N` is the source list size. Set it low on a small machine or to leave headroom for other work; there is no separate runtime ceiling to fight — the orchestrator honours this number directly. **Claim (Stage A) and Done+PR (Stage E) are always serial** — they touch the shared repo's git index/refs, so they run one-at-a-time in the orchestrator even while implement/verify agents fan out.
 
 ### 2. Build the source list
 
@@ -121,7 +121,7 @@ Otherwise (default), show the batch and ask once:
    #<n1> [<priority>][<size>] <title>
    #<n2> [<priority>][<size>] <title>
    …
-   parallel: <min(N, loop.max_parallel)>   retries: <loop.max_retries>   (runtime may further cap at min(16, cores-2))
+   parallel: <min(N, loop.max_parallel)>   retries: <loop.max_retries>
    milestone filter: <milestone.current or "none">
    worktree root: <repo>/<loop.worktree_root>
 Start? [y/N]
@@ -141,21 +141,30 @@ git pull --ff-only
 
 Fail-fast if trunk can't be brought clean — ask the user before any worktree is created.
 
-Stamp `claimed_at = <today YYYY-MM-DD>` **once, here, in the orchestrator process** — before any pipeline is spawned. This value is passed into every pipeline via the Workflow `args` (step 6) and is the literal string written to each issue's `started:` metadata in Stage A. Pipelines must **not** re-resolve "today" themselves — agent wall-clock can drift hours behind orchestrator wall-clock under heavy parallelism, and we want all claimed issues to read with the same `started:` date.
+Stamp `claimed_at = <today YYYY-MM-DD>` **once, here, in the orchestrator** — before any pipeline starts. The orchestrator holds this value and writes it verbatim into each issue's `started:` metadata in Stage A. Subagents must **not** re-resolve "today" themselves — agent wall-clock can drift hours behind orchestrator wall-clock under heavy parallelism, and we want all claimed issues to read with the same `started:` date. Pass `claimed_at` into any subagent prompt that needs it rather than letting the agent compute it.
 
-### 6. Invoke the Workflow tool
+### 6. Run the pipelines (main-loop orchestration)
 
-One Workflow call. Pass `{ source: <list>, repo, trunk, claimed_at, loop }` via `args`. The script runs **one pipeline per issue**, all in `parallel()` (capped at `loop.max_parallel`). Each pipeline is the end-to-end solo lifecycle for that one issue:
+The command's own session **is** the orchestrator — there is no separate runtime. It drives **one pipeline per issue** directly:
+
+- **Git and GitHub steps run in the orchestrator via `Bash`/`gh`** — Stage A (claim + worktree) and Stage E (done + push + PR). These need a shell and touch the shared repo, so the orchestrator does them itself, **serially**, never inside a subagent and never in parallel.
+- **The reasoning-heavy stages run as `Task` subagents** — Stage B (plan), C (implement), D.1 (verify) — each launched with `cwd` set to that issue's worktree. Up to `loop.max_parallel` of these run concurrently; the orchestrator dispatches, then awaits results.
+
+> **Why not one background runtime call?** Claim/worktree/push/PR are `git`/`gh` shell commands. A subagent-less background script has no shell and cannot touch the filesystem, so those steps must run either in the orchestrator's own `Bash` (chosen here) or inside a `Task` subagent that has `Bash`. The orchestrator owns them directly: it keeps the atomic-claim and PR steps serial and lets only the implement/verify agents fan out. Do **not** try to push the whole pipeline into a single fire-and-forget call — the git steps will fail with no shell.
+
+Concurrency model: iterate the source list; for each issue run Stage A serially (claim), then dispatch its Stage B→C→D subagents, keeping at most `loop.max_parallel` issues' agents in flight. As each issue's verify comes back green, run its Stage E serially (done + PR) before or alongside the next dispatch. Red pipelines record their failure and move on — one red never aborts the batch.
+
+Each pipeline is the end-to-end solo lifecycle for one issue:
 
 #### Pipeline stage A — Claim (atomic)
 
-The orchestrator (script body, **not** an agent) does this synchronously per issue so the flip+branch+worktree creation is one logical step before any agent runs:
+The orchestrator does this itself via `Bash`/`gh`, **serially** per issue, so the flip+branch+worktree creation is one logical step before any subagent runs:
 
 1. `gh issue edit <n> --remove-label status:planned --add-label status:in-progress` — atomic ownership flip.
 2. Compute `branch = <prefix>/<n>-<slug>`. `<prefix>` is resolved from the `type:*` label per the conventional-commits mapping in `commands/start.md` step 5 — `feat` for `type:feature`, `fix` for `type:bug`, `chore` for `type:task`/`type:idea`, `spike` for `type:research`. `<slug>` comes from the title — lowercased, non-alphanumeric → `-`, collapse repeats, trim to ~40 chars.
 3. `worktree_path = <repo>/<loop.worktree_root>/<n>`.
 4. `git worktree add "<worktree_path>" -b "<branch>" "<trunk>"` — branch + dedicated worktree created off the just-synced trunk.
-5. Fetch the issue body, set `started: <claimed_at>` (the orchestrator-stamped value passed in via `args`, **not** a freshly resolved "today") and `branch: <branch>` in the `<!-- solo:metadata -->` block, `gh issue edit --body-file`.
+5. Fetch the issue body, set `started: <claimed_at>` (the orchestrator-stamped value, **not** a freshly resolved "today") and `branch: <branch>` in the `<!-- solo:metadata -->` block, `gh issue edit --body-file`.
 
 If any step in Claim fails for a given issue, that issue's pipeline fails immediately with the partial state recorded. Other pipelines are unaffected.
 
@@ -163,7 +172,7 @@ If any step in Claim fails for a given issue, that issue's pipeline fails immedi
 
 #### Pipeline stage B — Plan agent
 
-`agent(prompt, { schema: SUBTASK_SCHEMA, model: loop.plan_model })` invoked with `cwd: worktree_path` so it sees the same trunk snapshot the implement agent will edit. Reads the issue's `## What` + `## Acceptance` + `## Test Plan` and returns:
+A `Task` subagent (model `loop.plan_model`) launched with `cwd: worktree_path` so it sees the same trunk snapshot the implement agent will edit. Its prompt asks it to read the issue's `## What` + `## Acceptance` + `## Test Plan` and return, as its final message, a JSON object:
 
 ```json
 { "subtasks": [{ "id": "...", "summary": "...", "covers": [0, 2] }] }
@@ -173,7 +182,7 @@ If any step in Claim fails for a given issue, that issue's pipeline fails immedi
 
 #### Pipeline stage C — Implement agent
 
-`agent(prompt, { model: loop.implement_model })` invoked with `cwd: worktree_path` — works the subtasks serially in the issue's own worktree (no `isolation: 'worktree'` because we already gave it a dedicated worktree path). The agent's prompt instructs it to:
+A `Task` subagent (model `loop.implement_model`) launched with `cwd: worktree_path` — works the subtasks serially in the issue's own worktree (the orchestrator already created a dedicated worktree, so the agent edits there directly). The agent's prompt instructs it to:
 
 - Stay inside the worktree.
 - Commit per subtask with a message that references the parent issue (`<subtask summary> (#<n>)`).
@@ -183,7 +192,7 @@ If any step in Claim fails for a given issue, that issue's pipeline fails immedi
 
 Verification has **two halves**, both required to pass a round: the per-issue Test Plan walk, then the repo-invariant hard-command gate.
 
-**D.1 — Test Plan walk.** `agent(prompt, { schema: VERIFY_SCHEMA, model: loop.verify_model })` invoked with `cwd: worktree_path`. Walks the issue body's `## Test Plan` items in the spirit of `/solo:test` — proposes a check per item, runs it via Bash inside the worktree, and returns:
+**D.1 — Test Plan walk.** A `Task` subagent (model `loop.verify_model`) launched with `cwd: worktree_path`. Walks the issue body's `## Test Plan` items in the spirit of `/solo:test` — proposes a check per item, runs it via Bash inside the worktree, and returns as its final message:
 
 ```json
 { "results": [{ "index": 0, "passed": true, "evidence": "..." }] }
@@ -210,7 +219,7 @@ Once every binary resolves, run the commands in order:
 
 #### Pipeline stage E — Done + PR
 
-Orchestrator (synchronous, not an agent):
+Orchestrator, via `Bash`/`gh`, **serial** per issue (never in a subagent):
 
 1. Rewrite the issue body so every `## Acceptance` and `## Test Plan` line that is `- [ ]` becomes `- [x]`.
 2. Append to `## Notes`: `- <claimed_at>: [loop] auto-closed (N implement→verify rounds, <commits> commits)`.
@@ -226,13 +235,13 @@ Orchestrator (synchronous, not an agent):
      --body-file /tmp/solo-pr-<n>.md
    ```
    Source data: the issue body **after** step 1-4 of this stage applied (ticks, `[loop]` Notes line, `completed:` metadata). That way the PR mirrors what just shipped to the issue.
-9. Return `{ status: "green", issue: <n>, branch, worktree_path, pr_url, rounds: <retry+1> }`.
+9. Record the pipeline outcome `{ status: "green", issue: <n>, branch, worktree_path, pr_url, rounds: <retry+1> }` in the orchestrator's results list for the step 7 summary.
 
 If the PR call surfaces "a pull request already exists" (e.g. a previous failed re-run), fetch the URL with `gh pr view --repo <owner/repo> --head <branch> --json url -q .url` and use it.
 
 #### Pipeline failure shape
 
-Any stage failure returns `{ status: "red", issue: <n>, branch, worktree_path, reason, evidence }`. Failed pipelines leave the worktree intact and open no PR — the user picks up manually from the worktree. **The issue is flipped `status:in-progress` → `status:blocked`** (`gh label create status:blocked --force`; swap the labels) so `/solo:today` surfaces it in the Blocked bucket instead of leaving a silently-stuck in-progress issue. The `reason` + last `evidence` are also written as a `- <claimed_at>: [blocked] <stage>: <reason>` line under the issue's `## Notes`, matching the manual-block convention so the audit trail is uniform. (Re-run safety still holds: `status:blocked` is out of the `status:planned` source filter.)
+Any stage failure records `{ status: "red", issue: <n>, branch, worktree_path, reason, evidence }` in the orchestrator's results list. Failed pipelines leave the worktree intact and open no PR — the user picks up manually from the worktree. **The issue is flipped `status:in-progress` → `status:blocked`** (`gh label create status:blocked --force`; swap the labels) so `/solo:today` surfaces it in the Blocked bucket instead of leaving a silently-stuck in-progress issue. The `reason` + last `evidence` are also written as a `- <claimed_at>: [blocked] <stage>: <reason>` line under the issue's `## Notes`, matching the manual-block convention so the audit trail is uniform. (Re-run safety still holds: `status:blocked` is out of the `status:planned` source filter.)
 
 #### Pipeline persisted summary (unattended)
 
@@ -240,7 +249,7 @@ Under `loop.auto_confirm: true`, each pipeline — green **or** red — posts it
 
 ### 7. Summary
 
-After the Workflow returns, print a per-issue summary:
+After all pipelines finish, print a per-issue summary from the orchestrator's results list:
 
 ```
 🤖 /solo:loop finished — <P> green / <F> red — <T> total implement→verify rounds
@@ -273,7 +282,7 @@ To retry a red issue end-to-end, manually flip it back: `gh issue edit <n> --rem
 
 ## Design constraints
 
-- **One worktree per issue, user-facing.** `.solo/worktrees/<n>/` is the canonical place — survives Workflow lifecycle, the user can `cd` into it, branches are real local branches not Workflow-runtime throwaways. The implement agent gets a `cwd` to that path; it does **not** use `isolation: 'worktree'`.
+- **One worktree per issue, user-facing.** `.solo/worktrees/<n>/` is the canonical place — created by the orchestrator (Stage A) and left in place after the run, so the user can `cd` into it; branches are real local branches, not throwaways. The implement and verify subagents get a `cwd` to that path — the worktree already exists, so no per-agent isolation is created or needed.
 - **Atomic claim, no rollback to `planned`.** The status flip is the ownership token. We never "un-claim" back to `status:planned` on failure — a failed pipeline flips `in-progress` → `status:blocked` (surfaced by `/solo:today`), keeping its worktree so the human can finish or recycle. The one thing we never do is silently drop the issue back into the source pool.
 - **No batch-level mutation before per-pipeline claim.** Refusals (step 3) check everything up front; if any pipeline fails after, the rest still run.
 - **Per-pipeline isolation, batch-level reporting.** One red pipeline does not abort the run. The summary surfaces every outcome with enough breadcrumbs (`worktree_path`, `pr_url`, failure stage) to pick up.
