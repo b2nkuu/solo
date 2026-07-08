@@ -62,6 +62,7 @@ You don't need `/solo:init` to start capturing — `/solo:capture` works out of 
 | `/solo:retro` | Reflect on closed work — cycle time + rework from issue metadata | `[<milestone> \| --since <date> \| --last <N>]` |
 | `/solo:release` | Tag from trunk, generate notes, close milestone | `[--dry-run]` |
 | `/solo:init` | Idempotent setup (labels + config) | — |
+| `/solo:doctor` | Health check — config, labels, cache-lag, auth + orphan issues (read-only) | — |
 | `/solo:cleanup` | Sweep stale local branches + worktrees whose issue is closed / PR was merged | — |
 
 ## How it models work
