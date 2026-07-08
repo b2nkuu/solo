@@ -3,7 +3,7 @@ description: Run every planned issue end-to-end through an autonomous Workflow (
 allowed-tools: [Bash, Workflow]
 ---
 
-# /solo:workflow
+# /solo:loop
 
 Pick every `status:planned` issue in the current milestone and drive each one through its full solo lifecycle in parallel — claim, branch, plan, implement, verify, close, PR — with no further interaction. The work that `/solo:start` + `/solo:test` + `/solo:done` would do manually for a single issue, batched and unattended.
 
@@ -11,9 +11,9 @@ Use this after `/solo:plan` has set Acceptance + Test Plan on every backlog item
 
 ## Cache lag awareness
 
-The slash command body Claude sees is **injected at session start** and stays frozen until `/reload-plugins` or a new session. The on-disk version at `commands/workflow.md` (and the sibling `commands/start.md`, `commands/test.md`, `commands/done.md` that its pipeline stages mirror) may have moved on. If the disk version differs from the spec text you were handed, **prefer disk**. Before executing any step below, re-read `commands/workflow.md` from disk — and re-read the sibling command files whenever a pipeline stage delegates to their behaviour (Stage A mirrors start, Stage D mirrors test, Stage E mirrors done's PR-body appendix).
+The slash command body Claude sees is **injected at session start** and stays frozen until `/reload-plugins` or a new session. The on-disk version at `commands/loop.md` (and the sibling `commands/start.md`, `commands/test.md`, `commands/done.md` that its pipeline stages mirror) may have moved on. If the disk version differs from the spec text you were handed, **prefer disk**. Before executing any step below, re-read `commands/loop.md` from disk — and re-read the sibling command files whenever a pipeline stage delegates to their behaviour (Stage A mirrors start, Stage D mirrors test, Stage E mirrors done's PR-body appendix).
 
-This matters most when `/solo:workflow` is being run inside the very session that just edited any of these specs — typical dogfood scenario for solo itself. Re-read on disk first, then run.
+This matters most when `/solo:loop` is being run inside the very session that just edited any of these specs — typical dogfood scenario for solo itself. Re-read on disk first, then run.
 
 Long-term enforcement (when the user also runs spirit): the dogfood verification step is tracked in `b2nkuu/spirit#9` — Phase 6 of `/spirit:implement` is expected to re-read disk + simulate the new behaviour automatically for any PR that touches `commands/*.md` or `skills/*/SKILL.md`. Until that ships, this "Cache lag awareness" section is the convention.
 
@@ -23,11 +23,11 @@ Long-term enforcement (when the user also runs spirit): the dogfood verification
 - No `size:xl` items left — they belong in `/solo:plan` breakdown, not here.
 - You're willing to review what each pipeline produced via PRs rather than commits-on-trunk.
 
-For a single issue you want to drive yourself, use `/solo:start <n>` instead. `/solo:workflow` never accepts an issue number argument — it always operates on the planned slice.
+For a single issue you want to drive yourself, use `/solo:start <n>` instead. `/solo:loop` never accepts an issue number argument — it always operates on the planned slice.
 
 ## Input
 
-`$ARGUMENTS` must be empty. If anything is passed, stop with `Usage: /solo:workflow (takes no arguments).`
+`$ARGUMENTS` must be empty. If anything is passed, stop with `Usage: /solo:loop (takes no arguments).`
 
 ## Steps
 
@@ -42,7 +42,7 @@ For a single issue you want to drive yourself, use `/solo:start <n>` instead. `/
     name: "main"
   milestone:
     current: "<name>"           # source filter
-  workflow:
+  loop:
     max_parallel: 4              # script-level soft cap on concurrent pipelines (see note)
     max_retries: 3               # implement→verify loop cap per issue
     worktree_root: ".solo/worktrees"   # relative to repo root
@@ -51,7 +51,7 @@ For a single issue you want to drive yourself, use `/solo:start <n>` instead. `/
     verify_model: haiku
   ```
 
-  **About `workflow.max_parallel`:** this is the **script-level soft cap** — the upper bound the orchestrator asks the Workflow tool to honour when scheduling pipelines. It is **distinct** from the Workflow runtime's own hard ceiling, which is roughly `min(16, cores - 2)` and applied unconditionally by the runtime regardless of what the script requests. The effective concurrency is `min(workflow.max_parallel, min(16, cores - 2), N)` where `N` is the source list size. Set `workflow.max_parallel` low to throttle yourself below the runtime cap (e.g. on a small laptop, or to leave headroom for other tools). Setting it above the runtime cap has no effect — the runtime cap wins.
+  **About `loop.max_parallel`:** this is the **script-level soft cap** — the upper bound the orchestrator asks the Workflow tool to honour when scheduling pipelines. It is **distinct** from the Workflow runtime's own hard ceiling, which is roughly `min(16, cores - 2)` and applied unconditionally by the runtime regardless of what the script requests. The effective concurrency is `min(loop.max_parallel, min(16, cores - 2), N)` where `N` is the source list size. Set `loop.max_parallel` low to throttle yourself below the runtime cap (e.g. on a small laptop, or to leave headroom for other tools). Setting it above the runtime cap has no effect — the runtime cap wins.
 
 ### 2. Build the source list
 
@@ -94,13 +94,13 @@ Every refusal aborts the whole batch — no partial flips, no partial branches, 
 Show the batch and ask once:
 
 ```
-🤖 /solo:workflow — <N> issue(s):
+🤖 /solo:loop — <N> issue(s):
    #<n1> [<priority>][<size>] <title>
    #<n2> [<priority>][<size>] <title>
    …
-   parallel: <min(N, workflow.max_parallel)>   retries: <workflow.max_retries>   (runtime may further cap at min(16, cores-2))
+   parallel: <min(N, loop.max_parallel)>   retries: <loop.max_retries>   (runtime may further cap at min(16, cores-2))
    milestone filter: <milestone.current or "none">
-   worktree root: <repo>/<workflow.worktree_root>
+   worktree root: <repo>/<loop.worktree_root>
 Start? [y/N]
 ```
 
@@ -122,7 +122,7 @@ Stamp `claimed_at = <today YYYY-MM-DD>` **once, here, in the orchestrator proces
 
 ### 6. Invoke the Workflow tool
 
-One Workflow call. Pass `{ source: <list>, repo, trunk, claimed_at, workflow }` via `args`. The script runs **one pipeline per issue**, all in `parallel()` (capped at `workflow.max_parallel`). Each pipeline is the end-to-end solo lifecycle for that one issue:
+One Workflow call. Pass `{ source: <list>, repo, trunk, claimed_at, loop }` via `args`. The script runs **one pipeline per issue**, all in `parallel()` (capped at `loop.max_parallel`). Each pipeline is the end-to-end solo lifecycle for that one issue:
 
 #### Pipeline stage A — Claim (atomic)
 
@@ -130,17 +130,17 @@ The orchestrator (script body, **not** an agent) does this synchronously per iss
 
 1. `gh issue edit <n> --remove-label status:planned --add-label status:in-progress` — atomic ownership flip.
 2. Compute `branch = <prefix>/<n>-<slug>`. `<prefix>` is resolved from the `type:*` label per the conventional-commits mapping in `commands/start.md` step 5 — `feat` for `type:feature`, `fix` for `type:bug`, `chore` for `type:task`/`type:idea`, `spike` for `type:research`. `<slug>` comes from the title — lowercased, non-alphanumeric → `-`, collapse repeats, trim to ~40 chars.
-3. `worktree_path = <repo>/<workflow.worktree_root>/<n>`.
+3. `worktree_path = <repo>/<loop.worktree_root>/<n>`.
 4. `git worktree add "<worktree_path>" -b "<branch>" "<trunk>"` — branch + dedicated worktree created off the just-synced trunk.
 5. Fetch the issue body, set `started: <claimed_at>` (the orchestrator-stamped value passed in via `args`, **not** a freshly resolved "today") and `branch: <branch>` in the `<!-- solo:metadata -->` block, `gh issue edit --body-file`.
 
 If any step in Claim fails for a given issue, that issue's pipeline fails immediately with the partial state recorded. Other pipelines are unaffected.
 
-**Crash safety:** an orchestrator killed before the `gh issue edit` flip leaves the issue as `planned`; killed after the flip but before worktree creation leaves the issue as `in-progress` with no worktree — that's the cost of an atomic flip we don't try to roll back. Re-runs of `/solo:workflow` will skip the issue (it's no longer `planned`), so the user fixes manually.
+**Crash safety:** an orchestrator killed before the `gh issue edit` flip leaves the issue as `planned`; killed after the flip but before worktree creation leaves the issue as `in-progress` with no worktree — that's the cost of an atomic flip we don't try to roll back. Re-runs of `/solo:loop` will skip the issue (it's no longer `planned`), so the user fixes manually.
 
 #### Pipeline stage B — Plan agent
 
-`agent(prompt, { schema: SUBTASK_SCHEMA, model: workflow.plan_model })` invoked with `cwd: worktree_path` so it sees the same trunk snapshot the implement agent will edit. Reads the issue's `## What` + `## Acceptance` + `## Test Plan` and returns:
+`agent(prompt, { schema: SUBTASK_SCHEMA, model: loop.plan_model })` invoked with `cwd: worktree_path` so it sees the same trunk snapshot the implement agent will edit. Reads the issue's `## What` + `## Acceptance` + `## Test Plan` and returns:
 
 ```json
 { "subtasks": [{ "id": "...", "summary": "...", "covers": [0, 2] }] }
@@ -150,7 +150,7 @@ If any step in Claim fails for a given issue, that issue's pipeline fails immedi
 
 #### Pipeline stage C — Implement agent
 
-`agent(prompt, { model: workflow.implement_model })` invoked with `cwd: worktree_path` — works the subtasks serially in the issue's own worktree (no `isolation: 'worktree'` because we already gave it a dedicated worktree path). The agent's prompt instructs it to:
+`agent(prompt, { model: loop.implement_model })` invoked with `cwd: worktree_path` — works the subtasks serially in the issue's own worktree (no `isolation: 'worktree'` because we already gave it a dedicated worktree path). The agent's prompt instructs it to:
 
 - Stay inside the worktree.
 - Commit per subtask with a message that references the parent issue (`<subtask summary> (#<n>)`).
@@ -158,7 +158,7 @@ If any step in Claim fails for a given issue, that issue's pipeline fails immedi
 
 #### Pipeline stage D — Verify agent
 
-`agent(prompt, { schema: VERIFY_SCHEMA, model: workflow.verify_model })` invoked with `cwd: worktree_path`. Walks the issue body's `## Test Plan` items in the spirit of `/solo:test` — proposes a check per item, runs it via Bash inside the worktree, and returns:
+`agent(prompt, { schema: VERIFY_SCHEMA, model: loop.verify_model })` invoked with `cwd: worktree_path`. Walks the issue body's `## Test Plan` items in the spirit of `/solo:test` — proposes a check per item, runs it via Bash inside the worktree, and returns:
 
 ```json
 { "results": [{ "index": 0, "passed": true, "evidence": "..." }] }
@@ -167,7 +167,7 @@ If any step in Claim fails for a given issue, that issue's pipeline fails immedi
 Then the orchestrator decides:
 
 - **All passed** → continue to stage E (Done).
-- **Any failed** AND retry count < `workflow.max_retries` → loop back to stage C with only the failing Test Plan indices in the implement prompt. Bump retry counter.
+- **Any failed** AND retry count < `loop.max_retries` → loop back to stage C with only the failing Test Plan indices in the implement prompt. Bump retry counter.
 - **Any failed** AND retry exhausted → pipeline fails with the unticked indices + last evidence.
 
 #### Pipeline stage E — Done + PR
@@ -175,7 +175,7 @@ Then the orchestrator decides:
 Orchestrator (synchronous, not an agent):
 
 1. Rewrite the issue body so every `## Acceptance` and `## Test Plan` line that is `- [ ]` becomes `- [x]`.
-2. Append to `## Notes`: `- <claimed_at>: [workflow] auto-closed (N implement→verify rounds, <commits> commits)`.
+2. Append to `## Notes`: `- <claimed_at>: [loop] auto-closed (N implement→verify rounds, <commits> commits)`.
 3. Set `completed: <claimed_at>` in metadata.
 4. `gh issue edit --body-file` to apply body + metadata.
 5. `gh label create status:done --force`; `gh issue edit --remove-label status:in-progress --add-label status:done`.
@@ -187,7 +187,7 @@ Orchestrator (synchronous, not an agent):
      --title "<issue title>" \
      --body-file /tmp/solo-pr-<n>.md
    ```
-   Source data: the issue body **after** step 1-4 of this stage applied (ticks, `[workflow]` Notes line, `completed:` metadata). That way the PR mirrors what just shipped to the issue.
+   Source data: the issue body **after** step 1-4 of this stage applied (ticks, `[loop]` Notes line, `completed:` metadata). That way the PR mirrors what just shipped to the issue.
 9. Return `{ status: "green", issue: <n>, branch, worktree_path, pr_url, rounds: <retry+1> }`.
 
 If the PR call surfaces "a pull request already exists" (e.g. a previous failed re-run), fetch the URL with `gh pr view --repo <owner/repo> --head <branch> --json url -q .url` and use it.
@@ -201,7 +201,7 @@ Any stage failure returns `{ status: "red", issue: <n>, branch, worktree_path, r
 After the Workflow returns, print a per-issue summary:
 
 ```
-🤖 /solo:workflow finished — <P> green / <F> red
+🤖 /solo:loop finished — <P> green / <F> red
 
 Green:
    #<n> <title>  →  PR <pr_url>  (worktree: <path>, <rounds> round(s))
@@ -219,7 +219,7 @@ Next:
 
 ### 8. Re-run safety
 
-`/solo:workflow` is safe to re-run after partial failure:
+`/solo:loop` is safe to re-run after partial failure:
 
 - Green issues are already `status:done` and closed → out of the source filter.
 - Red issues are `status:in-progress` → out of the source filter.

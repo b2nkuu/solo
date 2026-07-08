@@ -5,14 +5,14 @@ allowed-tools: [Bash]
 
 # /solo:cleanup
 
-`/solo:done` and `/solo:workflow` create real local branches and (for the batch path) per-issue worktrees under `.solo/worktrees/<n>/`. After a PR merges with `--delete-branch`, the remote branch is gone but the **local** copy and its worktree stay — disk clutter that hides what's actually in flight and breaks future `/solo:workflow` retries when a branch with the same name still exists locally.
+`/solo:done` and `/solo:loop` create real local branches and (for the batch path) per-issue worktrees under `.solo/worktrees/<n>/`. After a PR merges with `--delete-branch`, the remote branch is gone but the **local** copy and its worktree stay — disk clutter that hides what's actually in flight and breaks future `/solo:loop` retries when a branch with the same name still exists locally.
 
-`/solo:cleanup` is the explicit sweep. It lists every local branch + worktree that looks stale, asks once, then deletes in a single batch. It is **always** opt-in — `/solo:done` and `/solo:workflow` never auto-clean.
+`/solo:cleanup` is the explicit sweep. It lists every local branch + worktree that looks stale, asks once, then deletes in a single batch. It is **always** opt-in — `/solo:done` and `/solo:loop` never auto-clean.
 
 ## When to reach for it
 
 - `/solo:today` printed `ℹ N stale branches — /solo:cleanup`.
-- About to re-run `/solo:workflow` and want a fresh slate.
+- About to re-run `/solo:loop` and want a fresh slate.
 - After a session that closed several issues at once and `git branch` / `git worktree list` got noisy.
 
 For remote branch deletion: that's `gh pr merge --delete-branch`'s job at merge time, not this command's. `/solo:cleanup` only touches the local repo.
