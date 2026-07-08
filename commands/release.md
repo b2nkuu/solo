@@ -117,7 +117,7 @@ SINCE=""
 
 # fetch closed issues, then filter by closedAt > SINCE (only when SINCE is non-empty)
 gh issue list --repo <owner/repo> --state closed --limit 500 \
-  --json number,title,labels,closedAt,milestone
+  --json number,title,labels,closedAt,milestone,body
 ```
 
 In memory: if `SINCE` is non-empty, keep issues with `closedAt > SINCE`. If `SINCE` is empty (no previous tag), keep **all** closed issues — the latent bug to avoid is letting `SINCE` default to `HEAD`'s commit date, which would filter every issue out.
@@ -154,11 +154,32 @@ Notes:
 ⚠ <N> closed issues since <prev-tag> are not attached to milestone <milestone>:
   - #50 chore: bump deps
   - #53 fix typo
+
+⚠ <M> closed issues ship with unticked AC / Test Plan items:
+  - #48  Acceptance: - [ ] dark mode persists across reload
+  - #51  Test Plan:  - [ ] manual: login redirect on expired session
 ```
 
 Compute `<closed>` and `<total>` from the counts captured in Step 3 (`closed_issues` and `closed_issues + open_issues`). Example: `Milestone: v0.4 (3/5 closed, will close)`.
 
-The ⚠ block only appears when a milestone was chosen AND there are orphan issues. **Orphan = closed since previous tag AND (`milestone == null` OR `milestone.title != <chosen milestone>`)**. Enumerate orphans independently of the `--include-all-closes` flag — the warning reflects repo hygiene, not what ends up in Notes.
+The first ⚠ block only appears when a milestone was chosen AND there are orphan issues. **Orphan = closed since previous tag AND (`milestone == null` OR `milestone.title != <chosen milestone>`)**. Enumerate orphans independently of the `--include-all-closes` flag — the warning reflects repo hygiene, not what ends up in Notes.
+
+#### 7a. Unticked AC / Test Plan scan (warn, never block)
+
+Before rendering the second ⚠ block, scan the closed issues **already in scope** — the same set collected in Step 6 (closed since previous tag, milestone-scoped unless `--include-all-closes`). Reuse those issue bodies (Step 6 fetches `body` in its `--json` list); do not run a second `gh issue list` query. When a milestone was chosen, always scan the milestone-scoped set regardless of `--include-all-closes` — this warning reflects verification hygiene for what actually ships, mirroring the orphan block's independence from the flag.
+
+For each in-scope issue, parse its `## Acceptance` and `## Test Plan` sections (same parse as `/solo:done` step 3). An issue is **flagged** when either section still contains a `- [ ]` line — a genuinely unticked item, typically a `[done-forced]` close (see `commands/done.md` for the `[done-forced]` Notes tag). Ignore the empty `- [ ]` placeholder of a skippable section (a section that is missing or contains only that single placeholder contributes nothing).
+
+For every flagged issue, surface the issue number and each unticked line, tagged with its section:
+
+```
+⚠ <M> closed issues ship with unticked AC / Test Plan items:
+  - #<n>  Acceptance: - [ ] <unticked item>
+  - #<n>  Test Plan:  - [ ] <unticked item>
+  …
+```
+
+This block only appears when `<M>` ≥ 1. **No unticked items anywhere → render nothing (stay silent — no heading, no empty block).** The scan is always a soft warning: it surfaces what a `--force` close let through so the releaser can decide, but it **never blocks the cut** and is unaffected by `milestone.required`. The user proceeds (or not) at the Step 8 confirm exactly as before.
 
 The `Manifest:` line variants:
 
@@ -307,6 +328,7 @@ Then update `.solo/config.yml` `milestone.current:` to the new name (or empty st
 | `milestone.required: true` + unfinished issues in milestone | Stop |
 | `milestone.required: true` + closed issues since last tag without milestone | Stop |
 | `milestone.required: false` + same conditions | Warn, proceed on confirm |
+| Closed issue in scope has unticked AC / Test Plan `- [ ]` items | Warn (list issue + item), never block — independent of `milestone.required` |
 | `milestone.required: false` | Omit step 11 entirely (no next-milestone prompt, suggest, or config update) |
 | Tag already exists locally or remotely | Stop with hint to pick a new version |
 
