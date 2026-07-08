@@ -70,10 +70,12 @@ Compute three versions:
 
 Compare under a **Cache-lag** group:
 
+Compare by **match, not by ordering** — the newest tag is whatever `git tag --sort=-v:refname | head -1` returns (that flag sorts version-aware, so it works for both `YYYY.MM.DD` CalVer and `vX.Y.Z` semver without any manual string comparison). Then:
+
 - **Installed == latest tag** → **pass**: `✓ cache-lag: installed <version> matches latest release`.
-- **Installed < latest tag** (a newer release exists than what's installed) → **warn** with the exact fix and the reason:
+- **Installed != latest tag** (a different — almost always newer — release exists than what's installed) → **warn** with the exact fix and the reason:
   ```
-  ⚠ cache-lag: installed <installed> is behind latest release <tag>
+  ⚠ cache-lag: installed <installed> does not match latest release <tag>
       /solo:* runs from the installed snapshot, not this repo — a merged/released
       spec change is NOT live until you update the plugin.
       Fix:  /plugin        (update solo)
@@ -82,9 +84,9 @@ Compare under a **Cache-lag** group:
       at installPath .../solo/<tag>, and that installPath's commands/ dir reflects
       any renamed or added command specs.
   ```
-- **Working manifest > latest tag** (this repo has an unreleased bump — `plugin.json` version is ahead of every tag) → **warn** (informational, distinct from the install lag): `⚠ cache-lag: working plugin.json <manifest> is ahead of latest release <tag> — cut a release (/solo:release) so the change can be installed`.
+- **Working manifest != latest tag** (this repo's `plugin.json` version is not among the tags — an unreleased bump waiting to ship) → **warn** (informational, distinct from the install lag): `⚠ cache-lag: working plugin.json <manifest> is not yet released (latest tag <tag>) — cut a release (/solo:release) so the change can be installed`.
 
-Version compare is lexical on the `YYYY.MM.DD` tag scheme (which sorts correctly as strings); `git tag --sort=-v:refname` already returns them newest-first, so `head -1` is the newest. When a comparison is ambiguous (e.g. `version: "unknown"`), report a **warn** stating the versions couldn't be compared rather than guessing.
+Deliberately avoid manual `<`/`>` string comparison of versions — lexical ordering is wrong for semver (`v0.10.0` sorts before `v0.4.0`), and equality-vs-newest-tag is all this check needs. When a version can't be read (e.g. `version: "unknown"`, no tags yet), report a **warn** stating it couldn't be compared rather than guessing.
 
 ### 5. Auth + orphan check
 
