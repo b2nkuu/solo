@@ -13,7 +13,7 @@ Show a focused, scannable list of what to work on today.
 
 - Run `gh auth status`. On failure: stop, tell user to run `gh auth login`.
 - Resolve repo: `.solo/config.yml` `repo:` field → fallback `gh repo view --json nameWithOwner -q .nameWithOwner` → ask user.
-- Read `display.today_suggested_limit` (default `5`), `display.show_assignee` (default: auto — see step 6), `milestone.current`, and `milestone.required` (default `true`) from `.solo/config.yml`.
+- Read `display.today_suggested_limit` (default `5`), `display.show_assignee` (default: auto — see step 6), `milestone.current`, `milestone.required` (default `true`), and `okr.stale_days` (default `7`) from `.solo/config.yml`.
 
 ### 2. Fetch open issues
 
@@ -61,6 +61,7 @@ Use this exact shape (omit a group entirely if empty; if all three are empty, pr
 ```
 📅 Today (<YYYY-MM-DD>)
 📦 <milestone.current> (<closed>/<total> done)        ← only if milestone.current set
+🎯 <milestone.current>: KR1 2/5 · KR2 0/3 — ⏰ not measured for <N> days   ← only if the milestone description has a KR block
 
 In Progress (<count>):
   #<n> [<priority>][<size>] @<login> <title>
@@ -91,6 +92,20 @@ gh api "repos/<owner/repo>/milestones?state=open" \
 ```
 
 If `milestone.current` is set but no matching open milestone exists, show `📦 <name> (missing — create it in GitHub and update milestone.current in .solo/config.yml)` instead.
+
+For the `🎯` KR summary line — same gating as the `📦` line (only when `milestone.current` is set and matches an open milestone). Fetch the milestone's `description` (add `,description` to the `--jq` fields, or read it from the same milestones response) and look for an OKR block: a `## Key Results` heading followed by checklist lines in the form:
+
+```
+- [ ] KR1: <outcome> — current: <x> / target: <y> (measured: YYYY-MM-DD)
+```
+
+**If the description has no `## Key Results` block, render nothing — no `🎯` line at all.** When a block exists:
+
+1. For each KR line, parse `current: <x> / target: <y>` into the `<x>/<y>` count and take the label from the leading `KRn:` token.
+2. Render each as `KR1 2/5 · KR2 0/3`, joined by ` · `.
+3. Parse each `(measured: YYYY-MM-DD)` date. Take the **oldest** one and compute `<N>` = whole days since today. If `<N>` exceeds `okr.stale_days` (default `7`), append the tail `— ⏰ not measured for <N> days`. Otherwise omit the tail entirely (no `⏰`).
+
+The full line is `🎯 <milestone.current>: KR1 2/5 · KR2 0/3 — ⏰ not measured for <N> days`. This is a read-only summary — updating a KR means editing the milestone description directly (see the README milestone OKR convention).
 
 For the `[priority]` and `[size]` brackets in-line, use short forms: `high`/`med`/`low` and `xs`/`s`/`m`/`l`/`xl`. If a label is missing, render `-` (e.g. `[-][m]`).
 
