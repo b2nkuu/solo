@@ -117,7 +117,7 @@ SINCE=""
 
 # fetch closed issues, then filter by closedAt > SINCE (only when SINCE is non-empty)
 gh issue list --repo <owner/repo> --state closed --limit 500 \
-  --json number,title,labels,closedAt,milestone
+  --json number,title,labels,closedAt,milestone,body
 ```
 
 In memory: if `SINCE` is non-empty, keep issues with `closedAt > SINCE`. If `SINCE` is empty (no previous tag), keep **all** closed issues — the latent bug to avoid is letting `SINCE` default to `HEAD`'s commit date, which would filter every issue out.
@@ -166,7 +166,7 @@ The first ⚠ block only appears when a milestone was chosen AND there are orpha
 
 #### 7a. Unticked AC / Test Plan scan (warn, never block)
 
-Before rendering the second ⚠ block, scan the closed issues **already in scope** — the same set collected in Step 6 (closed since previous tag, milestone-scoped unless `--include-all-closes`). Reuse those issue bodies; do not run a second full `gh issue list` query. If bodies were not fetched in Step 6, add `body` to that step's `--json` field list so both steps share one round-trip. When a milestone was chosen, always scan the milestone-scoped set regardless of `--include-all-closes` — this warning reflects verification hygiene for what actually ships, mirroring the orphan block's independence from the flag.
+Before rendering the second ⚠ block, scan the closed issues **already in scope** — the same set collected in Step 6 (closed since previous tag, milestone-scoped unless `--include-all-closes`). Reuse those issue bodies (Step 6 fetches `body` in its `--json` list); do not run a second `gh issue list` query. When a milestone was chosen, always scan the milestone-scoped set regardless of `--include-all-closes` — this warning reflects verification hygiene for what actually ships, mirroring the orphan block's independence from the flag.
 
 For each in-scope issue, parse its `## Acceptance` and `## Test Plan` sections (same parse as `/solo:done` step 3). An issue is **flagged** when either section still contains a `- [ ]` line — a genuinely unticked item, typically a `[done-forced]` close (see `commands/done.md` for the `[done-forced]` Notes tag). Ignore the empty `- [ ]` placeholder of a skippable section (a section that is missing or contains only that single placeholder contributes nothing).
 
