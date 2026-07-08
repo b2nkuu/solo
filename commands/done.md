@@ -297,6 +297,7 @@ These bracketed tags carry meaning across solo commands. Spelled here so produce
 | `[loop]` | `/solo:loop` Stage E | yes | Auto-close audit (`auto-closed (N rounds, M commits)`) |
 | `[workflow]` | pre-rename command Stage E | yes | Legacy alias of `[loop]`; still recognised so pre-rename issues render |
 | `[approach]` | `/spirit:implement` Phase 5, or a manual comment / `## Notes` edit | yes | One-line description of the chosen approach, consumed by the Summary synthesis above |
+| `[skill]` | `/solo:plan` step 6 (opt-in, confidence-gated) | yes | Suggested spirit skill for the work (`design`/`implement`/`debug`/`refactor`/`inspect`) — a soft, optional hint a reader may parse to run `/spirit:<name>`; requires no spirit install |
 | `[blocked]` | Manual — applied directly to the issue when work stalls | yes | Reason the issue was blocked |
 | `[decision]` | Manual comment / `## Notes` edit | yes | A decision worth preserving in the body, not just the comment thread |
 | `[retro]` | `/solo:retro` step 6 (opt-in) | yes | Per-issue reflect stamp (`cycle <X>d · <B> blocked · <F> forced`) |

@@ -175,6 +175,7 @@ Generate AC + test plan for <N> planned items? [Y/n]
    - Aim for 3–5 AC items and 2–4 test plan items. Pull concrete nouns from the body — do not invent unrelated scope.
    - If the body has no `## What` content or the title is too vague, output `(no suggestion — provide your own or skip)` instead of guessing.
    - **Language:** write the prose of each AC and Test Plan item in the `language:` configured in `.solo/config.yml` (default `english` when unset). Technical English terms — file paths, identifiers, command names, code fences, `## What`-style references — stay verbatim and are never translated. The section **headings** (`## Acceptance`, `## Test Plan`) and the checklist syntax (`- [ ]`) stay English regardless of `language:` — solo's own parsers depend on them.
+   - **Skill hint (optional):** also assess which spirit skill best fits the work and, when confident, prepare a `[skill]` Notes line for it. See the *Skill recommendation* sub-section below. This is a soft hint layered onto the same body write — never a separate prompt, never a gate.
 4. Show the suggestions:
    ```
    #<n> <title>
@@ -193,12 +194,34 @@ Generate AC + test plan for <N> planned items? [Y/n]
    Use? [Y/edit/skip]
    ```
 5. Apply:
-   - **Y** (default) → rewrite the body. Replace the `## Acceptance` block (from the heading to the next `##` or `---`) with the suggested items. Same for `## Test Plan`. If `## Test Plan` is missing from the body (legacy issue), insert it immediately after `## Acceptance`. Preserve all other sections and the `<!-- solo:metadata -->` block exactly.
-   - **edit** → open the suggestion as a draft for the user to paste a revised version (one acceptance line per `- [ ] …`, blank line, one test line per `- [ ] …`). Apply the user's text.
-   - **skip** → leave the body unchanged.
-6. Write back via `gh issue edit <n> --repo <owner/repo> --body-file <tempfile>`.
+   - **Y** (default) → rewrite the body. Replace the `## Acceptance` block (from the heading to the next `##` or `---`) with the suggested items. Same for `## Test Plan`. If `## Test Plan` is missing from the body (legacy issue), insert it immediately after `## Acceptance`. If a confident skill hint was prepared (see *Skill recommendation*), append its `[skill]` line to `## Notes` in the **same** body rewrite. Preserve all other sections and the `<!-- solo:metadata -->` block exactly.
+   - **edit** → open the suggestion as a draft for the user to paste a revised version (one acceptance line per `- [ ] …`, blank line, one test line per `- [ ] …`). Apply the user's text. A prepared `[skill]` line is still appended to `## Notes` in this write unless the user removes it.
+   - **skip** → leave the body unchanged (no `[skill]` line either).
+6. Write back via `gh issue edit <n> --repo <owner/repo> --body-file <tempfile>` — a single write per item carrying the AC, Test Plan, and (if any) the `[skill]` Notes line together.
 
 If generation fails for any item (API error, empty body), surface a one-line warning and continue with the next item — do not block.
+
+#### Skill recommendation
+
+Layered onto the step 6 pass above: for each just-planned item, assess which **spirit** skill best fits the work and, when confident, write a one-line hint into the issue's `## Notes`.
+
+> **Soft coupling — this is an optional hint, not a dependency.** solo and spirit are separate plugins. The `[skill]` line is advice *"if you use the spirit plugin"* — nothing in solo requires spirit to be installed, and solo works identically with or without it. Never treat spirit as a prerequisite, and never let this step gate or block planning. If you skip it (low confidence, generation error, user declined step 6), the item is planned exactly the same.
+
+1. **Map** the issue to one skill from this set — `design`, `implement`, `debug`, `refactor`, `inspect` — using its `type:*` label + `size:*` + title + `## What`:
+   - `type:bug` → `debug`
+   - `type:feature` → `implement`; but `design` when the issue is large/architectural (`size:l` or `size:xl`) or the `## What` weighs multiple approaches / open unknowns
+   - `type:task` / `type:idea` → `implement`
+   - `type:research` → `design`
+   - a cleanup / refactor-flavored issue (title or `## What` centers on tidying, simplifying, restructuring existing code) → `refactor`
+   - a review / audit-flavored issue (title or `## What` centers on reviewing, auditing, or checking existing code) → `inspect`
+2. **Confidence gate.** Only emit a line when the mapping is reasonably confident. If the issue is ambiguous — vague title, no `## What`, or a type that doesn't map cleanly — **skip it silently**: no `[skill]` line, no guess. Better to omit than mislead. When step 6 as a whole is skipped, no `[skill]` lines are written at all.
+3. **Format.** Append this exact line to `## Notes` (today's date, from `date +%F`):
+   ```
+   - <YYYY-MM-DD>: [skill] <name>
+   ```
+   e.g. `- 2026-07-08: [skill] implement`. The `<name>` is exactly one of `design` / `implement` / `debug` / `refactor` / `inspect` — no `/spirit:` prefix, no extra words — so a downstream reader can parse it and invoke `/spirit:<name>`.
+4. **Where it lands.** Append to the body's `## Notes` section, folded into the same `--body-file` write as the AC/Test Plan rewrite (no second round-trip). If the issue has no `## Notes` section (a legacy issue), create it at the end of the body, above nothing — but keep the `<!-- solo:metadata -->` block last and intact. Mirror the safe-append pattern `/spirit:implement` uses for a missing `## Notes`. The `<name>` and section heading are English regardless of `language:` — the line is machine-parsed.
+5. **Downstream contract.** The `[skill]` line is a soft, informational hint. A consumer — `/solo:loop`, or a human — MAY parse `[skill] <name>` from `## Notes` and run `/spirit:<name>` to pick up the suggested skill. It is never required reading: an issue with no `[skill]` line is normal and not a defect.
 
 ### 7. Confirm
 
