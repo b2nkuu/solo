@@ -1,0 +1,104 @@
+# solo-nightly-loop.yml
+#
+# Drop this file into your repo at `.github/workflows/solo-nightly-loop.yml`
+# to run `/solo:loop` unattended on a schedule — implement, verify, and open a
+# PR for every `status:planned` issue in the current milestone, with no human at
+# the keyboard.
+#
+# What this workflow does:
+#   Once per night it runs Claude Code headless (`claude -p "/solo:loop"`) with
+#   `loop.auto_confirm: true` in `.solo/config.yml`. The loop claims each planned
+#   issue, works it in its own worktree, runs the issue's Test Plan plus the
+#   repo-invariant `verify.commands` gate, and opens a PR on green. Red pipelines
+#   flip the issue to `status:blocked` and post their summary to
+#   `loop.report_issue`. It never merges — a human reviews and merges the PRs.
+#
+# Before this is safe (read the README "Runner permissions" note):
+#   - `auto_confirm: true` removes only the confirm prompt, not the safety gates.
+#     The author filter still drops non-collaborator issues; `max_issues_per_run`
+#     still caps the batch; the hard verify gate still blocks a bad round.
+#   - Enable branch protection on trunk so code can only land via a reviewed PR.
+#     In unattended mode this must be a mechanical guarantee, not a spec promise.
+#   - The token below can push branches, edit issues, and open PRs — never merge.
+#
+# Config this expects in `.solo/config.yml`:
+#   loop:
+#     auto_confirm: true
+#     max_issues_per_run: 5
+#     report_issue: "<the issue number where run summaries are posted>"
+#   verify:
+#     commands:
+#       - "<your lint/analyze cmd>"
+#       - "<your test cmd>"
+#
+# Secrets this expects:
+#   ANTHROPIC_API_KEY — for Claude Code headless.
+#   (GITHUB_TOKEN is provided automatically; permissions are scoped below.)
+
+name: solo — nightly loop
+
+on:
+  schedule:
+    # 02:00 UTC daily. Adjust to your team's quiet hours.
+    - cron: "0 2 * * *"
+  # Manual trigger for a one-off run outside the schedule.
+  workflow_dispatch:
+
+# Never let a scheduled run overlap a manual run (or another scheduled run):
+# a second invocation waits rather than double-claiming the same planned issues.
+concurrency:
+  group: solo-loop
+  cancel-in-progress: false
+
+# Minimum permissions for the loop's own token: edit issues + labels, push
+# branches, and open PRs. GitHub Actions has no push-only or open-PR-only scope,
+# so `contents`/`pull-requests: write` technically permit more — the loop never
+# exercises merge, and trunk **branch protection** (not token scope) is what
+# mechanically blocks code from landing without a reviewed PR. Configure it.
+permissions:
+  contents: write        # push per-issue branches (no finer "push-only" scope exists)
+  issues: write          # flip status labels, tick AC/Test Plan, post summaries
+  pull-requests: write   # open PRs — the loop never merges (branch protection enforces that)
+
+jobs:
+  loop:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # loop syncs and branches off trunk
+
+      # --- Toolchain for verify.commands -----------------------------------
+      # The hard verify gate runs your `verify.commands` inside each worktree,
+      # so the runner must actually have that toolchain installed — otherwise
+      # the loop fails fast with `env-missing` instead of a useful result.
+      # Uncomment the block that matches your project (or add your own):
+      #
+      # Flutter:
+      #   - uses: subosito/flutter-action@v2
+      #     with: { channel: stable, cache: true }   # cache: true keeps the pub cache warm
+      #   # verify.commands: ["flutter analyze", "flutter test"]
+      #
+      # Node:
+      #   - uses: actions/setup-node@v4
+      #     with: { node-version: 20, cache: npm }
+      #   - run: npm ci
+      #   # verify.commands: ["npm run lint", "npm test"]
+      #
+      # Leave this out entirely if you set no `verify.commands` — the loop then
+      # verifies on the Test Plan alone (`verified (test-plan only)`).
+
+      - name: Install Claude Code + solo
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          # Install the solo plugin however your setup expects (marketplace add,
+          # or a pinned version). Pin a version for reproducible unattended runs.
+
+      - name: Run /solo:loop (unattended)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # gh CLI auth for issue/PR calls
+        run: |
+          # auto_confirm: true in .solo/config.yml means no prompt blocks this.
+          claude -p "/solo:loop"

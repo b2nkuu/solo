@@ -140,12 +140,25 @@ One pipeline per issue, all in parallel (capped at `loop.max_parallel`, default 
 1. **Claim** — atomically flip `status:planned` → `status:in-progress`, create a `<prefix>/<n>-<slug>` branch off trunk (`feat`/`fix`/`chore` per type — see the Branch conventions section), and a dedicated worktree at `.solo/worktrees/<n>/`. Issues are claimed only as a slot frees up, so killing the loop mid-batch leaves uncalled issues untouched.
 2. **Plan** — derive a subtask list from the issue's `## What` + `## Acceptance` + `## Test Plan`; refuse to proceed unless every Acceptance item is covered.
 3. **Implement** — work the subtasks serially inside the issue's own worktree (no cross-issue file conflicts when other pipelines run in parallel).
-4. **Verify** — walk `## Test Plan` like `/solo:test`; tick `[x]` for pass, loop back to Implement (up to `loop.max_retries`) for fail.
+4. **Verify** — walk `## Test Plan` like `/solo:test`, then run the repo-invariant `verify.commands` (if configured) inside the worktree; every hard command must exit `0`. Tick `[x]` for pass, loop back to Implement (up to `loop.max_retries`) for fail.
 5. **Done + PR** — tick remaining AC, set `completed`, flip status to `done`, close the issue, push the branch, open a PR back to trunk. The worktree stays at `.solo/worktrees/<n>/` for you to inspect or clean.
 
-Refusals are up front: empty source list, any `size:xl` in the batch, or any issue missing AC / Test Plan → batch aborts before mutating anything. Per-pipeline failures are isolated — one red issue does not kill the others, the failed issue stays `status:in-progress` with its worktree intact, and the green pipelines still close + PR. To pick up a red issue, `cd .solo/worktrees/<n>/` (the branch is already checked out there — no `git switch` needed) and continue with `/solo:test` / `/solo:done`.
+Refusals are up front: empty source list, any `size:xl` in the batch, or any issue missing AC / Test Plan → batch aborts before mutating anything. Per-pipeline failures are isolated — one red issue does not kill the others, the failed issue flips to `status:blocked` with its worktree intact (so `/solo:today` surfaces it), and the green pipelines still close + PR. To pick up a red issue, `cd .solo/worktrees/<n>/` (the branch is already checked out there — no `git switch` needed) and continue with `/solo:test` / `/solo:done`.
 
 `/solo:start <n>` (single-issue) is unaffected — it never runs a Workflow.
+
+#### Unattended mode
+
+Set `loop.auto_confirm: true` and `/solo:loop` runs without a human keypress — safe to drive from cron or GitHub Actions (`claude -p "/solo:loop"`). `auto_confirm` removes only the step-4 confirm; every safety gate still applies:
+
+- **Refusals** (empty list, `size:xl`, missing AC/Test Plan) still abort the batch.
+- **Author filter** — only issues authored by the repo owner or a collaborator enter the run, so a public-repo stranger can't feed instructions into an unattended agent. `/solo:plan` remains the human content gate.
+- **`loop.max_issues_per_run`** (default 5) caps the batch per run, independent of `max_parallel`.
+- **Hard verify gate** — a non-zero `verify.commands` exit fails the round; a missing toolchain fails fast as `env-missing` rather than burning retries.
+
+Each pipeline posts its summary to `loop.report_issue`; red pipelines end at `status:blocked`. A ready-to-adapt schedule lives at [`examples/workflows/solo-nightly-loop.yml`](./examples/workflows/solo-nightly-loop.yml).
+
+**Runner permissions.** The loop's token needs to push branches, edit issues, and open PRs — **never merge**. Enable branch protection on trunk so code lands only through a reviewed PR; in unattended mode this must be a mechanical guarantee, not a spec promise. Merging stays a human action.
 
 ## Configuration
 
@@ -174,9 +187,21 @@ note:
 display:
   today_suggested_limit: 5
   date_format: "%Y-%m-%d"
+
+# /solo:loop — all optional; shown with defaults.
+loop:
+  max_parallel: 4              # concurrent pipelines (soft cap)
+  max_retries: 3               # implement→verify rounds per issue
+  auto_confirm: false          # true → unattended: skip the confirm prompt (refusals still gate)
+  max_issues_per_run: 5        # budget cap per unattended run
+  report_issue: ""             # issue number where unattended run summaries are posted
+
+# Repo invariants the loop's hard verify gate runs in each worktree (opt-in).
+verify:
+  commands: []                 # e.g. ["flutter analyze", "flutter test"] or ["npm run lint", "npm test"]
 ```
 
-No secrets — auth is entirely via `gh`.
+No secrets for the normal flow — auth is via `gh`. Unattended `/solo:loop` on a runner additionally needs `ANTHROPIC_API_KEY` (see the example workflow).
 
 ### Language
 
