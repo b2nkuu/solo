@@ -257,4 +257,4 @@ If `<F_ac> + <F_tp> == 0` and every walked item is now ticked, add:
 - **Never tick fail items.** A failed step is the truth — surface it, regardless of which section it's in.
 - **Batch the body write.** All ticks (both sections) + the Notes line go in one `gh issue edit --body-file` call after the walk.
 - **Read-only on issue body until the end.** This makes `Ctrl-C` mid-walk safe.
-- **Don't change `status:*` labels.** This command verifies; it does not advance the workflow. Use `/solo:done` to close.
+- **Don't change `status:*` labels.** This command verifies; it does not advance the lifecycle. Use `/solo:done` to close.

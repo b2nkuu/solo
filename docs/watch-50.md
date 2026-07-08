@@ -39,7 +39,7 @@ observed invocations across the period.
 | `/solo:plan milestone` | **cut** | Not invoked; no milestone was opened or closed in the window. Milestone fields on `/solo:plan` and `/solo:capture` stay — only the sub-command goes. |
 
 Flow-driving skills not on this list (`capture`, `plan`, `start`, `test`,
-`done`, `release`, `today`, `init`, `workflow`, `cleanup`) are out of scope per
+`done`, `release`, `today`, `init`, `loop`, `cleanup`) are out of scope per
 the issue's Acceptance — no removal without a separate discussion issue.
 
 ## Notes

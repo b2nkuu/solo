@@ -55,7 +55,7 @@ You don't need `/solo:init` to start capturing — `/solo:capture` works out of 
 | `/solo:today` | Show today's focus list | — |
 | `/solo:start` | Mark in-progress + create branch (single issue) | `<issue#> [--force]` |
 | `/solo:fast-track` | Capture + plan + start in one shot (size:xs / size:s only) | `"<title>" [<priority> <size>]` |
-| `/solo:workflow` | Run every planned issue end-to-end through an autonomous Workflow (start → implement → test → done + PR) | — |
+| `/solo:loop` | Run every planned issue end-to-end through an autonomous Workflow (start → implement → test → done + PR) | — |
 | `/solo:test` | Walk the test plan, run or verify each item, tick passed | `<issue#>` |
 | `/solo:done` | Record outcome + close + open a rich PR (Summary + AC + Test Plan + Notes); refuses on unticked AC/Test Plan unless `--force` | `<issue#> [--force]` |
 | `/solo:plan` | Triage the Inbox into planned work | — |
@@ -85,7 +85,7 @@ Every issue body has an `## Acceptance` and `## Test Plan` section. They start b
 
 - **At plan time.** `/solo:plan` asks once per item if you want it to suggest Acceptance Criteria and a Test Plan from the title, the `## What` line, and the issue's `type:*`. You can accept (`Y`), paste your own (`edit`), or skip — nothing is written without confirmation.
 - **At start time.** `/solo:start` prints both sections after creating the branch so you see the goalposts and verification steps as you switch into the work.
-- **At verify time.** `/solo:test <n>` walks the `## Test Plan` one item at a time, suggests a concrete way to verify each (a command to run, or "manual — verify yourself" for UI checks), and ticks what passes. Failures stay unticked and get a one-line note in `## Notes`. No status label changes — this is a verification pass, not a workflow step.
+- **At verify time.** `/solo:test <n>` walks the `## Test Plan` one item at a time, suggests a concrete way to verify each (a command to run, or "manual — verify yourself" for UI checks), and ticks what passes. Failures stay unticked and get a one-line note in `## Notes`. No status label changes — this is a verification pass, not a lifecycle step.
 - **At close time.** `/solo:done` lists every remaining unticked checklist item alongside the outcome prompt and offers `Tick all? [Y/edit/n]` — the common "everything done" case is one keystroke; `edit` lets you tick a subset per section. If any AC or Test Plan item is still `- [ ]` after the prompt, `/solo:done` refuses to close — "closed" means the work and its verification both completed. Pass `--force` to override (e.g. an AC item that has genuinely gone obsolete); the slip is recorded in `## Notes` as `[done-forced]`.
 
 The sections stay parseable Markdown checkboxes, so the issue page on GitHub doubles as the audit trail for what was promised, what was tested, and what shipped.
@@ -127,20 +127,20 @@ Result: a `type:task` issue created with `priority:high`, `size:xs`, and `status
 - Hard-scoped to `size:xs` / `size:s`. `size:m`, `size:l`, and `size:xl` are rejected with a one-liner pointing at `/solo:capture` + `/solo:plan`, so design pressure on larger work is preserved.
 - All `/solo:start` preflight guards (dirty working tree, trunk out of sync, branch already exists) still fire — and they fire *before* issue creation, so a rejection never leaves an orphan issue behind.
 
-### Autonomous workflow
+### Autonomous loop
 
-When the planned backlog is small but non-trivial — a typical solo sprint — there's no point driving one issue at a time. `/solo:workflow` picks every `status:planned` issue in `milestone.current` and runs each one end-to-end through its full solo lifecycle in parallel:
+When the planned backlog is small but non-trivial — a typical solo sprint — there's no point driving one issue at a time. `/solo:loop` picks every `status:planned` issue in `milestone.current` and runs each one end-to-end through its full solo lifecycle in parallel:
 
 ```
-/solo:workflow
+/solo:loop
 ```
 
-One pipeline per issue, all in parallel (capped at `workflow.max_parallel`, default 4):
+One pipeline per issue, all in parallel (capped at `loop.max_parallel`, default 4):
 
-1. **Claim** — atomically flip `status:planned` → `status:in-progress`, create a `<prefix>/<n>-<slug>` branch off trunk (`feat`/`fix`/`chore` per type — see the Branch conventions section), and a dedicated worktree at `.solo/worktrees/<n>/`. Issues are claimed only as a slot frees up, so killing the workflow mid-batch leaves uncalled issues untouched.
+1. **Claim** — atomically flip `status:planned` → `status:in-progress`, create a `<prefix>/<n>-<slug>` branch off trunk (`feat`/`fix`/`chore` per type — see the Branch conventions section), and a dedicated worktree at `.solo/worktrees/<n>/`. Issues are claimed only as a slot frees up, so killing the loop mid-batch leaves uncalled issues untouched.
 2. **Plan** — derive a subtask list from the issue's `## What` + `## Acceptance` + `## Test Plan`; refuse to proceed unless every Acceptance item is covered.
 3. **Implement** — work the subtasks serially inside the issue's own worktree (no cross-issue file conflicts when other pipelines run in parallel).
-4. **Verify** — walk `## Test Plan` like `/solo:test`; tick `[x]` for pass, loop back to Implement (up to `workflow.max_retries`) for fail.
+4. **Verify** — walk `## Test Plan` like `/solo:test`; tick `[x]` for pass, loop back to Implement (up to `loop.max_retries`) for fail.
 5. **Done + PR** — tick remaining AC, set `completed`, flip status to `done`, close the issue, push the branch, open a PR back to trunk. The worktree stays at `.solo/worktrees/<n>/` for you to inspect or clean.
 
 Refusals are up front: empty source list, any `size:xl` in the batch, or any issue missing AC / Test Plan → batch aborts before mutating anything. Per-pipeline failures are isolated — one red issue does not kill the others, the failed issue stays `status:in-progress` with its worktree intact, and the green pipelines still close + PR. To pick up a red issue, `cd .solo/worktrees/<n>/` (the branch is already checked out there — no `git switch` needed) and continue with `/solo:test` / `/solo:done`.
@@ -222,7 +222,7 @@ solo uses five branch prefixes — aligned with Conventional Commits — so a gl
 | `type:research` | `spike/` | Exploration, time-boxed, may not ship |
 | — | `release/` | Reserved for `/solo:release`'s manifest bump branch (`release/<version>`) |
 
-Per-issue work branches are built from `{prefix}/{issue}-{slug}` (see the `branch.pattern` config). The `<prefix>` is resolved from the issue's `type:*` label at branch-creation time by `/solo:start` and `/solo:workflow`. `release/<version>` is created only by `/solo:release` when a manifest bump is needed (see `commands/release.md` step 9) — it never carries an issue number.
+Per-issue work branches are built from `{prefix}/{issue}-{slug}` (see the `branch.pattern` config). The `<prefix>` is resolved from the issue's `type:*` label at branch-creation time by `/solo:start` and `/solo:loop`. `release/<version>` is created only by `/solo:release` when a manifest bump is needed (see `commands/release.md` step 9) — it never carries an issue number.
 
 If you set a custom `branch.pattern` that still uses the legacy `{type}` placeholder, the raw type name (`feature`, `bug`, `task`, …) is substituted for backward compatibility, but new repos should use `{prefix}`.
 

@@ -6,7 +6,7 @@ allowed-tools: [Bash]
 
 # /solo:start
 
-Mark a single issue in-progress and (optionally) create a git branch for it. For batching the whole planned backlog through an autonomous lifecycle (start → implement → test → done + PR), use `/solo:workflow` instead.
+Mark a single issue in-progress and (optionally) create a git branch for it. For batching the whole planned backlog through an autonomous lifecycle (start → implement → test → done + PR), use `/solo:loop` instead.
 
 ## Cache lag awareness
 

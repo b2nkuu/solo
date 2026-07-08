@@ -220,11 +220,11 @@ If a PR was opened, add a second line: `🔀 PR: <url>`.
 
 ## Appendix: PR body shape
 
-This appendix defines the canonical PR body that **both** `/solo:done` step 8 and `/solo:workflow` Stage E step 8 produce. Single source of truth — drift between the two commands is a bug.
+This appendix defines the canonical PR body that **both** `/solo:done` step 8 and `/solo:loop` Stage E step 8 produce. Single source of truth — drift between the two commands is a bug.
 
 > **Cache-lag note for self-edits.** When you (Claude) run `/solo:done` after a spec change to this very file (`commands/done.md`), re-read from disk first to get the latest appendix rules. The injected slash command body is frozen at session start, but the canonical render rules for the PR body live here and may have been updated by an in-session commit (or a freshly merged PR) — disk wins.
 >
-> **Approach call-out source.** The `[approach]` line consumed by Summary synthesis (below) is expected to be written automatically by `/spirit:implement` Phase 5 — tracked in `b2nkuu/spirit#8`. Until that ships, the line only appears when the user writes it manually as a comment on the issue (or edits the body's `## Notes` directly). A PR with no Approach call-out is the normal `/solo:workflow` path and is not a bug.
+> **Approach call-out source.** The `[approach]` line consumed by Summary synthesis (below) is expected to be written automatically by `/spirit:implement` Phase 5 — tracked in `b2nkuu/spirit#8`. Until that ships, the line only appears when the user writes it manually as a comment on the issue (or edits the body's `## Notes` directly). A PR with no Approach call-out is the normal `/solo:loop` path and is not a bug.
 
 ### Render order (top to bottom)
 
@@ -255,7 +255,7 @@ Every section appears **only when non-empty after rendering**:
 - `## Notes` — copy the issue's `## Notes` block verbatim with two strip operations applied **only** to the bottom of the section:
   1. Remove a trailing `---` line if it is the **last non-blank line**.
   2. Remove a trailing `<!-- solo:metadata … -->` HTML comment if it is the last non-blank block (the comment itself spans multiple lines — strip the whole opening-to-closing comment).
-  A `---` or `<!-- … -->` that appears anywhere **above** the trailing block is preserved verbatim (a user may have intentionally pasted one inside a `[decision]` line). If the resulting section has no remaining non-blank lines, omit the `## Notes` heading from the PR body entirely. Preserve every other line including the timestamped `[test]` / `[done]` / `[done-forced]` / `[workflow]` / `[approach]` / `[decision]` / `[blocked]` / `[retro]` entries — that audit trail is the whole point.
+  A `---` or `<!-- … -->` that appears anywhere **above** the trailing block is preserved verbatim (a user may have intentionally pasted one inside a `[decision]` line). If the resulting section has no remaining non-blank lines, omit the `## Notes` heading from the PR body entirely. Preserve every other line including the timestamped `[test]` / `[done]` / `[done-forced]` / `[loop]` / `[workflow]` / `[approach]` / `[decision]` / `[blocked]` / `[retro]` entries — that audit trail is the whole point.
 
 Do **not** insert section headings that have no content.
 
@@ -274,10 +274,10 @@ The `## Summary` paragraph is built from these three sources, in priority order:
 Fallback when sources are sparse:
 
 - No `## What` content → Summary is the issue title used verbatim as a single sentence. Append `.` only if the title does not already end with sentence punctuation (`.`, `!`, `?`, `…`). Never paraphrase — preserve the exact title text, including non-English script and question marks like "...ได้ไหม?".
-- No `[approach]` line → render Summary from title + `## What` without an Approach call-out. This is the **expected** path for `/solo:workflow`-driven PRs, which never write `[approach]` lines themselves.
+- No `[approach]` line → render Summary from title + `## What` without an Approach call-out. This is the **expected** path for `/solo:loop`-driven PRs, which never write `[approach]` lines themselves.
 - Both empty → Summary is the title alone, rendered per the rule above. The heading still appears (Summary is the only always-present section after `Closes`).
 
-Note: the most recent `[done]` (from `/solo:done` step 4) or `[workflow]` (from `/solo:workflow` Stage E) line is part of the verbatim Notes copy, **not** the Summary. Don't double-render them.
+Note: the most recent `[done]` (from `/solo:done` step 4) or `[loop]` (from `/solo:loop` Stage E; legacy runs wrote `[workflow]`) line is part of the verbatim Notes copy, **not** the Summary. Don't double-render them.
 
 Keep the paragraph **under ~120 words**. Never invent scope that isn't in the issue body — Wabi-Sabi: ship what's true, don't fabricate.
 
@@ -294,7 +294,8 @@ These bracketed tags carry meaning across solo commands. Spelled here so produce
 | `[test]` | `/solo:test` step 6 | yes | Per-walk pass/fail/skip summary |
 | `[done]` | `/solo:done` step 4 | yes | Outcome line from the close prompt |
 | `[done-forced]` | `/solo:done --force` step 4 | yes | What slipped past the completion gate |
-| `[workflow]` | `/solo:workflow` Stage E | yes | Auto-close audit (`auto-closed (N rounds, M commits)`) |
+| `[loop]` | `/solo:loop` Stage E | yes | Auto-close audit (`auto-closed (N rounds, M commits)`) |
+| `[workflow]` | pre-rename command Stage E | yes | Legacy alias of `[loop]`; still recognised so pre-rename issues render |
 | `[approach]` | `/spirit:implement` Phase 5, or a manual comment / `## Notes` edit | yes | One-line description of the chosen approach, consumed by the Summary synthesis above |
 | `[blocked]` | Manual — applied directly to the issue when work stalls | yes | Reason the issue was blocked |
 | `[decision]` | Manual comment / `## Notes` edit | yes | A decision worth preserving in the body, not just the comment thread |
