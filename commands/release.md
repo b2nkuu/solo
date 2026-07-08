@@ -280,6 +280,21 @@ gh release create <new-tag> \
   --notes-file <tempfile>
 ```
 
+#### 10a. Review milestone KRs before closing (informational, never a gate)
+
+If a milestone was chosen **and** its `description` (captured in Step 3, or fetched now) contains a `## Key Results` OKR block (see the README milestone OKR convention), show the block and ask **once**:
+
+```
+🎯 <milestone title> Key Results:
+  - [ ] KR1: <outcome> — current: <x> / target: <y> (measured: YYYY-MM-DD)
+  …
+Final KR values updated in the milestone description? [y/N]
+```
+
+This is **skippable and never blocks** — proceed to the close regardless of the answer (or no answer). If the answer is `n`/empty, still proceed; the prompt is a nudge to edit the milestone description before it's closed, not a stop. If the milestone has no `## Key Results` block, skip this sub-step silently.
+
+Rationale: a milestone at ~70% KR attainment means the targets were set right — a missed KR is data about scope, not a failure to gate the release on. Updating the final numbers keeps the OKR block honest as a record; it must not stand between you and shipping.
+
 If a milestone was chosen, close it using the `number` captured in Step 3 (no re-query by title):
 
 ```bash
@@ -329,6 +344,7 @@ Then update `.solo/config.yml` `milestone.current:` to the new name (or empty st
 | `milestone.required: true` + closed issues since last tag without milestone | Stop |
 | `milestone.required: false` + same conditions | Warn, proceed on confirm |
 | Closed issue in scope has unticked AC / Test Plan `- [ ]` items | Warn (list issue + item), never block — independent of `milestone.required` |
+| Milestone description has a `## Key Results` OKR block | Show it + ask once whether final KR values are updated (Step 10a) — informational, never a gate; proceed regardless |
 | `milestone.required: false` | Omit step 11 entirely (no next-milestone prompt, suggest, or config update) |
 | Tag already exists locally or remotely | Stop with hint to pick a new version |
 

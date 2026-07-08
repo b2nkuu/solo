@@ -188,6 +188,10 @@ display:
   today_suggested_limit: 5
   date_format: "%Y-%m-%d"
 
+# Milestone OKR summary (see Releases & milestones → OKRs).
+okr:
+  stale_days: 7                # /solo:today flags KRs not measured for more than this many days
+
 # /solo:loop — all optional; shown with defaults.
 loop:
   max_parallel: 4              # concurrent pipelines (soft cap)
@@ -256,6 +260,26 @@ If you set a custom `branch.pattern` that still uses the legacy `{type}` placeho
 solo treats a release as a **snapshot of trunk** — a git tag plus a GitHub Release. No release branches. Hotfixes are new commits on trunk with a new patch tag. Multi-week work that can't ship goes behind a feature flag, not a long-lived branch.
 
 **Milestones group issues by intended release.** GitHub Milestones are the source of truth — solo just keeps `milestone.current` in `.solo/config.yml` pointing at the active one, so `/solo:capture` can attach it automatically.
+
+### OKRs on a milestone
+
+A milestone can carry an **Objective and Key Results** block right in its GitHub **description** — no new command, no new issue metadata. The description holds two headings, `## Objective` and `## Key Results`, and each KR is a checklist line in this exact form:
+
+```markdown
+## Objective
+Ship a delightful dark mode that users keep switched on.
+
+## Key Results
+- [ ] KR1: weekly dark-mode active users — current: 120 / target: 500 (measured: 2026-07-01)
+- [ ] KR2: accessibility contrast issues — current: 3 / target: 0 (measured: 2026-07-05)
+```
+
+The `current: <x> / target: <y>` fragment is what solo parses for progress, and `(measured: YYYY-MM-DD)` records when each number was last checked. **Updating a KR is just editing the milestone description directly** — tick the box or bump the numbers in GitHub; there's no `/solo:*` command that writes here.
+
+Two nudges read this block (nothing else touches it):
+
+- **`/solo:today`** shows a one-line KR summary under the milestone progress line — `🎯 v0.4: KR1 120/500 · KR2 3/0` — and appends `— ⏰ not measured for <N> days` when the oldest `measured:` date is more than `okr.stale_days` (default `7`) old. No block on the milestone → no line.
+- **`/solo:release`** prints the KR block right before closing the milestone and asks once whether the final values are updated. It's a nudge, never a gate — the release proceeds regardless. A milestone landing at ~70% attainment usually means the targets were set right; a missed KR is data about scope, not a failure to block on.
 
 ### Flow
 
