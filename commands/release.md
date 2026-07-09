@@ -112,17 +112,20 @@ Find issues closed since the previous tag (or since repo start if no previous ta
 
 ```bash
 PREV=<latest tag or empty>
-SINCE=""
-[ -n "$PREV" ] && SINCE=$(git log -1 --format=%cI "$PREV")   # ISO date of prev tag commit, or empty when no prior tag
+SINCE_EPOCH=""
+# %ct = committer date as a UNIX timestamp (absolute instant, timezone-independent).
+[ -n "$PREV" ] && SINCE_EPOCH=$(git log -1 --format=%ct "$PREV")
 
-# fetch closed issues, then filter by closedAt > SINCE (only when SINCE is non-empty)
+# fetch closed issues, then filter by closedAt > SINCE_EPOCH (only when SINCE_EPOCH is non-empty)
 gh issue list --repo <owner/repo> --state closed --limit 500 \
   --json number,title,labels,closedAt,milestone,body
 ```
 
-In memory: if `SINCE` is non-empty, keep issues with `closedAt > SINCE`. If `SINCE` is empty (no previous tag), keep **all** closed issues — the latent bug to avoid is letting `SINCE` default to `HEAD`'s commit date, which would filter every issue out.
+In memory: if `SINCE_EPOCH` is non-empty, keep issues whose close time is **strictly after** the previous tag's commit. **Compare as absolute instants, never as raw ISO strings** — GitHub's `closedAt` is UTC (`…Z`) while `git log %cI` carries the committer's local offset (`…+07:00`), so a lexical `closedAt > SINCE` string compare is wrong whenever the two fall on the same calendar day (it silently drops issues that closed after the tag). Convert both to epoch seconds and compare numerically. In `jq`: `(.closedAt | fromdateiso8601) > <SINCE_EPOCH>` (`fromdateiso8601` parses the `Z` suffix to a correct epoch). If `SINCE_EPOCH` is empty (no previous tag), keep **all** closed issues — the latent bug to avoid is letting the since-boundary default to `HEAD`'s commit time, which would filter every issue out.
 
-Then **scope to the chosen milestone by default**: keep only issues whose `milestone.title == <chosen milestone>`. If no milestone was chosen in Step 3, keep every issue that passed the SINCE filter (nothing to scope to).
+> **Why epoch, not `%cI`:** the earlier `%cI` (local-offset ISO string) + lexical `>` compare passed only because previous releases fell on a *different day* than the prior tag, where the date prefix alone decided the order. A second release on the **same day** as the prior tag exposed the bug — every issue closed that day was dropped and the notes came out empty. Epoch comparison is correct for both same-day and cross-day releases.
+
+Then **scope to the chosen milestone by default**: keep only issues whose `milestone.title == <chosen milestone>`. If no milestone was chosen in Step 3, keep every issue that passed the since-tag filter (nothing to scope to).
 
 If `--include-all-closes` was passed, skip the milestone-scope filter and keep every closed-since-prev-tag issue (previous behavior).
 
