@@ -42,11 +42,12 @@ If already closed (state is `CLOSED`) — typically because a merged PR with `Cl
 
 - Skip step 7 (the close call) — the issue is already closed.
 - Still run step 6 (flip status to `status:done`) — this is the whole point of detect-and-flip.
-- Step 3's outcome prompt is still asked **when the body has no `[done]` line** under `## Notes` (the AC/Test Plan tick prompt and the step 4a gate are skipped — the work already shipped). Then run step 4 to append the `[done]` line, and step 5 to set `completed:` if empty. If a `[done]` line already exists, skip steps 3–5.
+- Steps 3–5 (outcome prompt, body edits, metadata) are also skipped: the user is fixing up state on a PR-closed issue, not finishing the work manually. Closing was already recorded by the PR merge, and re-prompting for an outcome on something they already shipped is friction.
+- **Exception — only when `review.check` is set in `.solo/config.yml`** (the post-merge step of step 8b runs `/solo:done` on a PR-closed issue): if the body has no `[done]` line under `## Notes`, still ask step 3's one-line outcome (skip the AC/Test Plan tick prompt and the step 4a gate — the work already shipped), then run step 4 to append the `[done]` line and step 5 to set `completed:` if empty. With `review.check` unset, none of this applies and step 2 behaves as above.
 - Skip step 8 (PR offer) — a PR already closed this issue, by definition.
 - Print a short note in step 9: `ℹ️  #<n> was already closed (PR auto-close). Flipped status:* → status:done.`
 
-In short: detect already-closed → ask the outcome only if no `[done]` line exists (steps 3–5, outcome only), then step 6, then step 9. The rest of the flow is for issues that are still open when `/solo:done` runs.
+In short: detect already-closed → step 6, then step 9 (with `review.check` set and no `[done]` line, also the outcome-only steps 3–5 first). The rest of the flow is for issues that are still open when `/solo:done` runs.
 
 ### 3. Confirm final tick state + ask for outcome (optional)
 
