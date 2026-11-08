@@ -387,7 +387,7 @@ Config (all under `review:`, read from `.solo/config.yml`):
 | `sha_marker` | `Reviewed <sha>` | Text a review comment carries to name the commit it reviewed (`<sha>` = the PR HEAD sha). |
 | `merge_wait_minutes` | `60` | Max wait for merge after findings are answered. `0` = do not watch. |
 
-Every wait runs **in the background with a timeout** (a polling loop started with `run_in_background`, or the Monitor tool) — never a foreground `sleep`. Poll every 30–60 seconds; stop at the timeout.
+Every wait runs **in the background with a timeout** (a polling loop started with `run_in_background`, or the Monitor tool) — never a foreground `sleep`. Poll every 30–60 seconds; stop at the first poll after the timeout (or, for the merge watch, `review.merge_wait_minutes`) has elapsed.
 
 ### Rules
 
@@ -402,7 +402,10 @@ Every wait runs **in the background with a timeout** (a polling loop started wit
    - `CLOSED` without merge → report `PR closed without merge` and finish.
    - cap reached → finish quietly (the user will say when it merges).
    With `0`, finish right after rule 4/5.
-8. **Post-merge step.** Fetch the issue. If it has no `[done]` line under `## Notes` or is not labelled `status:done`, come back to the foreground (the background watch has ended) and run `/solo:done <n>` (the issue may already be closed by the merge — `/solo:done` flips the label). Outcome handling: in interactive `/solo:done` it asks the one-line outcome here (enter = skip); in `/solo:loop` (no human, including `loop.auto_confirm: true`) it never prompts — it writes no `[done]` line (the `[loop]` Notes line already covers it) and only ensures the issue is closed and labelled `status:done`. Then run `gh issue list --repo <owner/repo> --state open --limit 200 --json number,title,body` and keep issues whose `## Notes` has a `ต้องทำก่อน:` line containing `#<n>` as a whole token (not a prefix of a longer number); report them as now startable (if the same line lists another blocker `#<m>` that is still open → not startable yet).
+8. **Post-merge step.** The background watch has ended; continue in the foreground and branch on the caller. Never re-invoke `/solo:done` from here.
+   - **Caller `/solo:done` (interactive):** fetch the issue. If it has no `[done]` line under `## Notes`, ask the one-line outcome (enter = skip) and, if given, append `- <YYYY-MM-DD>: [done] <outcome>` and set `completed:` in metadata if empty. Ensure the issue carries `status:done` (swap any other `status:*` label) and is closed.
+   - **Caller `/solo:loop` (no human, including `loop.auto_confirm: true`):** never prompt and never invoke `/solo:done` — Stage E steps 1–6 already did that work (ticks, `[loop]` Notes line, `completed:`, `status:done`, close). Only check the issue still carries `status:done` and is closed; re-add with `gh issue edit` / `gh issue close` if missing.
+   - **Both:** run `gh issue list --repo <owner/repo> --state open --limit 200 --json number,title,body` and keep issues whose `## Notes` has a `ต้องทำก่อน:` line containing `#<n>` as a whole token (not a prefix of a longer number); report them as now startable (if the same line lists another blocker `#<m>` that is still open → not startable yet).
 9. **Never delete** the worktree or the branch — that is `/solo:cleanup`'s job.
 
 ### Result

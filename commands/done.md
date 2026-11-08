@@ -43,11 +43,11 @@ If already closed (state is `CLOSED`) — typically because a merged PR with `Cl
 - Skip step 7 (the close call) — the issue is already closed.
 - Still run step 6 (flip status to `status:done`) — this is the whole point of detect-and-flip.
 - Steps 3–5 (outcome prompt, body edits, metadata) are also skipped: the user is fixing up state on a PR-closed issue, not finishing the work manually. Closing was already recorded by the PR merge, and re-prompting for an outcome on something they already shipped is friction.
-- **Exception — only when `review.check` is set in `.solo/config.yml`** (the post-merge step of step 8b runs `/solo:done` on a PR-closed issue): if the body has no `[done]` line under `## Notes`, still ask step 3's one-line outcome (skip the AC/Test Plan tick prompt and the step 4a gate — the work already shipped), then run step 4 to append the `[done]` line and step 5 to set `completed:` if empty. With `review.check` unset, none of this applies and step 2 behaves as above.
+- **Exception — interactive `/solo:done` post-merge path of step 8b only** (never reached from `/solo:loop`, which does not run `/solo:done`): step 8b's rule 8 handles the missing `[done]` outcome inline. Nothing here prompts; with `review.check` unset, step 2 behaves exactly as above.
 - Skip step 8 (PR offer) — a PR already closed this issue, by definition.
 - Print a short note in step 9: `ℹ️  #<n> was already closed (PR auto-close). Flipped status:* → status:done.`
 
-In short: detect already-closed → step 6, then step 9 (with `review.check` set and no `[done]` line, also the outcome-only steps 3–5 first). The rest of the flow is for issues that are still open when `/solo:done` runs.
+In short: detect already-closed → step 6, then step 9. The rest of the flow is for issues that are still open when `/solo:done` runs.
 
 ### 3. Confirm final tick state + ask for outcome (optional)
 
@@ -336,7 +336,7 @@ Config (all under `review:`, read from `.solo/config.yml`):
 | `sha_marker` | `Reviewed <sha>` | Text a review comment carries to name the commit it reviewed (`<sha>` = the PR HEAD sha). |
 | `merge_wait_minutes` | `60` | Max wait for merge after findings are answered. `0` = do not watch. |
 
-Every wait runs **in the background with a timeout** (a polling loop started with `run_in_background`, or the Monitor tool) — never a foreground `sleep`. Poll every 30–60 seconds; stop at the timeout.
+Every wait runs **in the background with a timeout** (a polling loop started with `run_in_background`, or the Monitor tool) — never a foreground `sleep`. Poll every 30–60 seconds; stop at the first poll after the timeout (or, for the merge watch, `review.merge_wait_minutes`) has elapsed.
 
 ### Rules
 
@@ -351,7 +351,10 @@ Every wait runs **in the background with a timeout** (a polling loop started wit
    - `CLOSED` without merge → report `PR closed without merge` and finish.
    - cap reached → finish quietly (the user will say when it merges).
    With `0`, finish right after rule 4/5.
-8. **Post-merge step.** Fetch the issue. If it has no `[done]` line under `## Notes` or is not labelled `status:done`, come back to the foreground (the background watch has ended) and run `/solo:done <n>` (the issue may already be closed by the merge — `/solo:done` flips the label). Outcome handling: in interactive `/solo:done` it asks the one-line outcome here (enter = skip); in `/solo:loop` (no human, including `loop.auto_confirm: true`) it never prompts — it writes no `[done]` line (the `[loop]` Notes line already covers it) and only ensures the issue is closed and labelled `status:done`. Then run `gh issue list --repo <owner/repo> --state open --limit 200 --json number,title,body` and keep issues whose `## Notes` has a `ต้องทำก่อน:` line containing `#<n>` as a whole token (not a prefix of a longer number); report them as now startable (if the same line lists another blocker `#<m>` that is still open → not startable yet).
+8. **Post-merge step.** The background watch has ended; continue in the foreground and branch on the caller. Never re-invoke `/solo:done` from here.
+   - **Caller `/solo:done` (interactive):** fetch the issue. If it has no `[done]` line under `## Notes`, ask the one-line outcome (enter = skip) and, if given, append `- <YYYY-MM-DD>: [done] <outcome>` and set `completed:` in metadata if empty. Ensure the issue carries `status:done` (swap any other `status:*` label) and is closed.
+   - **Caller `/solo:loop` (no human, including `loop.auto_confirm: true`):** never prompt and never invoke `/solo:done` — Stage E steps 1–6 already did that work (ticks, `[loop]` Notes line, `completed:`, `status:done`, close). Only check the issue still carries `status:done` and is closed; re-add with `gh issue edit` / `gh issue close` if missing.
+   - **Both:** run `gh issue list --repo <owner/repo> --state open --limit 200 --json number,title,body` and keep issues whose `## Notes` has a `ต้องทำก่อน:` line containing `#<n>` as a whole token (not a prefix of a longer number); report them as now startable (if the same line lists another blocker `#<m>` that is still open → not startable yet).
 9. **Never delete** the worktree or the branch — that is `/solo:cleanup`'s job.
 
 ### Result
