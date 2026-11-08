@@ -222,9 +222,13 @@ If a PR was opened, add a second line: `🔀 PR: <url>`.
 
 This appendix defines the canonical PR body that **both** `/solo:done` step 8 and `/solo:loop` Stage E step 8 produce. Single source of truth — drift between the two commands is a bug.
 
+> **Inline copy in loop.** An installed command only sees its own body, so `commands/loop.md` carries a verbatim copy of the block between the `pr-body-rules` markers below (everything from *Render order* through *Language*). Edit both in the same PR — the two blocks must stay byte-identical.
+
 > **Cache-lag note for self-edits.** When you (Claude) run `/solo:done` after a spec change to this very file (`commands/done.md`), re-read from disk first to get the latest appendix rules. The injected slash command body is frozen at session start, but the canonical render rules for the PR body live here and may have been updated by an in-session commit (or a freshly merged PR) — disk wins.
 >
 > **Approach call-out source.** The `[approach]` line consumed by Summary synthesis (below) is expected to be written automatically by `/spirit:implement` Phase 5 — tracked in `b2nkuu/spirit#8`. Until that ships, the line only appears when the user writes it manually as a comment on the issue (or edits the body's `## Notes` directly). A PR with no Approach call-out is the normal `/solo:loop` path and is not a bug.
+
+<!-- pr-body-rules:start — copied verbatim into commands/loop.md; edit both -->
 
 ### Render order (top to bottom)
 
@@ -250,7 +254,7 @@ Every section appears **only when non-empty after rendering**:
 
 - `Closes #<n>` — always present (first line, single line).
 - `## Summary` — always present. See "Summary synthesis" below for fallback when sources are sparse.
-- `## Acceptance` — omitted when the issue's `## Acceptance` is skippable. Skippable means the heading is absent, OR the section contains no `- [ ]` / `- [x]` items at all (whitespace, the empty `- [ ]` placeholder, or stray text without checklist syntax all count as "no items"). Ticks in the rendered output reflect the body that step 4 just wrote, so a `--force` close shows any `- [ ]` lines that survived the gate.
+- `## Acceptance` — omitted when the issue's `## Acceptance` is skippable. Skippable means the heading is absent, OR the section contains no `- [ ]` / `- [x]` items at all (whitespace, the empty `- [ ]` placeholder, or stray text without checklist syntax all count as "no items"). Ticks in the rendered output reflect the body the caller just wrote (`/solo:done` step 4, `/solo:loop` Stage E steps 1–4), so a `--force` close shows any `- [ ]` lines that survived the gate.
 - `## Test Plan` — same omit rule against the issue's `## Test Plan`.
 - `## Notes` — copy the issue's `## Notes` block verbatim with two strip operations applied **only** to the bottom of the section:
   1. Remove a trailing `---` line if it is the **last non-blank line**.
@@ -284,6 +288,8 @@ Keep the paragraph **under ~120 words**. Never invent scope that isn't in the is
 **Language.** Generate the Summary paragraph in the `language:` configured in `.solo/config.yml` (default `english` when unset). Technical English terms — file paths, identifiers, command names, issue numbers, the `Closes #<n>` line, the `## Summary` heading itself — stay verbatim and are never translated. The `## Acceptance`, `## Test Plan`, and `## Notes` blocks are copied **verbatim** from the issue body — their language is whatever was written there, and `language:` does not retranslate them. Only the Summary paragraph itself is generated fresh and therefore subject to `language:`.
 
 When the fallback path triggers (no `## What` content → Summary is the issue title used verbatim), the title is preserved exactly — `language:` does not translate it. This matches the title-preservation rule already stated above for non-English scripts.
+
+<!-- pr-body-rules:end -->
 
 ### Recognised `## Notes` tags
 
