@@ -55,9 +55,9 @@ You don't need `/solo:init` to start capturing — `/solo:capture` works out of 
 | `/solo:today` | Show today's focus list | — |
 | `/solo:start` | Mark in-progress + create branch (single issue) | `<issue#> [--force]` |
 | `/solo:fast-track` | Capture + plan + start in one shot (size:xs / size:s only) | `"<title>" [<priority> <size>] [--no-branch]` |
-| `/solo:loop` | Run every planned issue end-to-end autonomously (start → implement → test → done + PR) | — |
+| `/solo:loop` | Run every planned issue end-to-end autonomously (start → implement → test → done + PR; with `review.check` set, also answers PR review findings) | — |
 | `/solo:test` | Walk the test plan, run or verify each item, tick passed | `<issue#>` |
-| `/solo:done` | Record outcome + close + open a rich PR (Summary + AC + Test Plan + Notes); refuses on unticked AC/Test Plan unless `--force` | `<issue#> [--force]` |
+| `/solo:done` | Record outcome + close + open a rich PR (Summary + AC + Test Plan + Notes); refuses on unticked AC/Test Plan unless `--force`; with `review.check` set, answers PR review findings then watches for merge | `<issue#> [--force]` |
 | `/solo:plan` | Triage the Inbox into planned work | — |
 | `/solo:retro` | Reflect on closed work — cycle time + rework from issue metadata | `[<milestone> \| --since <date> \| --last <N>]` |
 | `/solo:release` | Tag from trunk, generate notes, close milestone | `[--dry-run]` |
@@ -201,6 +201,13 @@ loop:
   auto_confirm: false          # true → unattended: skip the confirm prompt (refusals still gate)
   max_issues_per_run: 5        # budget cap per unattended run
   report_issue: ""             # issue number where unattended run summaries are posted
+
+# PR review follow-up after /solo:done and /solo:loop open a PR (opt-in).
+review:
+  check: ""                    # name of the review PR check; "" = off (behaviour unchanged)
+  timeout_minutes: 20          # max wait for the check to finish
+  sha_marker: "Reviewed <sha>" # text the review comment uses to name the commit it reviewed
+  merge_wait_minutes: 60       # max wait for merge after findings are answered; 0 = no watch
 
 # Repo invariants the loop's hard verify gate runs in each worktree (opt-in).
 verify:
