@@ -1,0 +1,21 @@
+name: Spec Drift
+
+on:
+  pull_request:
+    paths:
+      - "commands/**"
+      - "scripts/check-spec-drift.py"
+      - ".github/workflows/spec-drift.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  spec-drift:
+    name: Inline spec copies match canonical source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check spec drift
+        run: python3 scripts/check-spec-drift.py
