@@ -55,7 +55,7 @@ gh issue edit <n> --repo <owner/repo> \
 
 ### 4. Update metadata
 
-Fetch the body, find the `<!-- solo:metadata ... -->` comment, and set `started: <today>` (only overwrite if the field is empty). Write back:
+Fetch the body, find the standalone `<!-- solo:metadata ... -->` block (a line that is exactly `<!-- solo:metadata` through the closing `-->`; a mid-sentence mention of `<!-- solo:metadata -->` is not a block — ignore it and leave it untouched), and set `started: <today>` (only overwrite if the field is empty). Write back:
 
 ```bash
 gh issue view <n> --repo <owner/repo> --json body -q .body > /tmp/solo-body
@@ -64,6 +64,18 @@ gh issue edit <n> --repo <owner/repo> --body-file /tmp/solo-body
 ```
 
 Preserve the rest of the body verbatim.
+
+If no standalone block exists, append one at the end of the body (after a blank line; the rest of the body stays byte-identical), in the same format as `/solo:capture` step 5:
+
+```
+<!-- solo:metadata
+created: <YYYY-MM-DD>
+started: <YYYY-MM-DD>
+completed:
+time_spent:
+branch:
+-->
+```
 
 ### 5. Branch creation (optional, trunk-based)
 
@@ -99,7 +111,7 @@ Build the branch name from `branch.pattern` per the **Name** rule in the **Appen
 git switch -c <branch-name>
 ```
 
-Record the branch name in metadata `branch:` field (same body-edit flow as step 4).
+Record the branch name in metadata `branch:` field (same body-edit flow as step 4, including a block appended per step 4 when none existed).
 
 ### 6. Confirm
 
