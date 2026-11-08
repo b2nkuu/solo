@@ -67,11 +67,10 @@ With `--no-branch`, skip every git guard below and go straight to step 2 — not
   If the trunk pull fails (uncommitted changes on trunk, divergence) → stop with `❌ trunk <trunk> is out of sync — resolve before fast-tracking`.
 - Check `git status --porcelain`:
   - Non-empty → stop with `❌ working tree is dirty — commit or stash before fast-tracking`. No issue is created.
-- Resolve the `branch.pattern` tokens (same rules as `/solo:start` step 5):
-  - `{prefix}` = `chore` (fast-track always uses `type:task`). A legacy `{type}` token resolves to `task`.
-  - `{slug}` = title lowercased, non-alphanumeric → `-`, collapse repeats, trimmed to ~40 chars.
-  - Literal text in the pattern (e.g. `b2nkuu/` in `b2nkuu/{issue}-{slug}`) is kept as-is.
-- **Branch-already-exists preflight**: build a glob from `branch.pattern` with the resolved tokens and `{issue}` → `*` (e.g. `chore/*-<slug>` for the default pattern, `b2nkuu/*-<slug>` for `b2nkuu/{issue}-{slug}`), then list local branches matching it (the issue number is unknown at this point but the rest is fixed). If any such branch exists → stop with `❌ a branch already exists for this slug: <branch>`. This catches the "I already fast-tracked this" case before the issue is created so no orphan issue is left behind. The post-create existence check in step 3 is a defense-in-depth backstop for the unlikely race where the new issue number happens to collide.
+- Resolve the `branch.pattern` tokens (canonical rules: **Appendix: branch.pattern** in `commands/start.md`; inline copy here):
+  - `{prefix}` = `chore` — fast-track always uses `type:task` (legacy `{type}` = `task`). Other text in the pattern is literal.
+  - `{slug}`: lowercase the title, replace each run of characters outside `[a-z0-9]` with `-`, trim `-` from both ends; if longer than 40 chars, keep the longest run of whole `-`-separated words that fits in 40 (hard-cut at 40 when the first word alone is longer); if empty, use `issue`.
+- **Branch-already-exists preflight**: build the glob — the pattern with `{issue}` → `*` and `[`, `]`, `*`, `?` in the other parts backslash-escaped (e.g. `chore/*-<slug>` for the default pattern, `b2nkuu/*-<slug>` for `b2nkuu/{issue}-{slug}`). List candidates with `git branch --list '<glob>'`, then keep only those where the part `*` matched is all digits (so `chore/*-fix-typo` does not catch `chore/40-docs-fix-typo`) (the issue number is unknown at this point but the rest is fixed). If any such branch exists → stop with `❌ a branch already exists for this slug: <branch>`. This catches the "I already fast-tracked this" case before the issue is created so no orphan issue is left behind. The post-create existence check in step 3 is a defense-in-depth backstop for the unlikely race where the new issue number happens to collide.
 
 ### 2. Create the issue with its labels in one call
 

@@ -253,7 +253,7 @@ solo uses five branch prefixes — aligned with Conventional Commits — so a gl
 | `type:research` | `spike/` | Exploration, time-boxed, may not ship |
 | — | `release/` | Reserved for `/solo:release`'s manifest bump branch (`release/<version>`) |
 
-Per-issue work branches are built from `{prefix}/{issue}-{slug}` (see the `branch.pattern` config). The `<prefix>` is resolved from the issue's `type:*` label at branch-creation time by `/solo:start` and `/solo:loop`. `release/<version>` is created only by `/solo:release` when a manifest bump is needed (see `commands/release.md` step 9) — it never carries an issue number.
+Per-issue work branches are built from `{prefix}/{issue}-{slug}` (see the `branch.pattern` config; the full name/glob/regex rules live in the **Appendix: branch.pattern** at the bottom of `commands/start.md`). The `<prefix>` is resolved from the issue's `type:*` label at branch-creation time by `/solo:start` and `/solo:loop`. `release/<version>` is created only by `/solo:release` when a manifest bump is needed (see `commands/release.md` step 9) — it never carries an issue number.
 
 If you set a custom `branch.pattern` that still uses the legacy `{type}` placeholder, the raw type name (`feature`, `bug`, `task`, …) is substituted for backward compatibility, but new repos should use `{prefix}`.
 
