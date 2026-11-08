@@ -65,6 +65,18 @@ gh issue edit <n> --repo <owner/repo> --body-file /tmp/solo-body
 
 Preserve the rest of the body verbatim.
 
+If no standalone block exists, append one at the end of the body (after a blank line; the rest of the body stays byte-identical), in the same format as `/solo:capture` step 5:
+
+```
+<!-- solo:metadata
+created: <YYYY-MM-DD>
+started: <YYYY-MM-DD>
+completed:
+time_spent:
+branch:
+-->
+```
+
 ### 5. Branch creation (optional, trunk-based)
 
 solo follows [trunk-based development](https://trunkbaseddevelopment.com/): branches are **short-lived** (target ≤ 2 days), scoped small, and merged back to `trunk` fast.
@@ -99,7 +111,7 @@ Build the branch name from `branch.pattern` per the **Name** rule in the **Appen
 git switch -c <branch-name>
 ```
 
-Record the branch name in metadata `branch:` field (same body-edit flow as step 4).
+Record the branch name in metadata `branch:` field (same body-edit flow as step 4, including a block appended per step 4 when none existed).
 
 ### 6. Confirm
 
