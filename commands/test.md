@@ -12,7 +12,9 @@ Use this after the work is done but before `/solo:done` — it converts both the
 
 ## Cache lag awareness
 
-The slash command body Claude sees is **injected at session start** and stays frozen until `/reload-plugins` or a new session. The on-disk version at `commands/test.md` may have moved on (a recent PR to solo's own specs is the common case — e.g. the move from "walk TP only" to "walk AC + TP"). If the disk version differs from the spec text you were handed, **prefer disk**. Before executing any step below, re-read `commands/test.md` from disk and follow that copy.
+The slash command body Claude sees is **injected at session start** and stays frozen until `/reload-plugins` or a new session. That body is the spec to follow.
+
+**Only inside the solo repo itself** — detected by `.claude-plugin/plugin.json` in the working tree having `"name": "solo"`, not merely by a `commands/` folder existing — the on-disk version at `commands/test.md` may have moved on (a recent PR to solo's own specs is the common case — e.g. the move from "walk TP only" to "walk AC + TP"). There, before executing any step below, re-read `commands/test.md` from disk and **prefer disk** if it differs from the spec text you were handed. In any other repo, never read `commands/*.md` from the working tree: those files are absent or belong to the user's project.
 
 This matters most when `/solo:test` is being run inside the very session that just edited `commands/test.md` — typical dogfood scenario for solo itself. Re-read on disk first, then walk.
 
