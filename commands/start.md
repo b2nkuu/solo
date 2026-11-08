@@ -55,7 +55,7 @@ gh issue edit <n> --repo <owner/repo> \
 
 ### 4. Update metadata
 
-Fetch the body, find the `<!-- solo:metadata ... -->` comment, and set `started: <today>` (only overwrite if the field is empty). Write back:
+Fetch the body, find the standalone `<!-- solo:metadata ... -->` block (a line that is exactly `<!-- solo:metadata` through the closing `-->`; a mid-sentence mention of `<!-- solo:metadata -->` is not a block — ignore it and leave it untouched), and set `started: <today>` (only overwrite if the field is empty). Write back:
 
 ```bash
 gh issue view <n> --repo <owner/repo> --json body -q .body > /tmp/solo-body
