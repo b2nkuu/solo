@@ -12,7 +12,9 @@ By default `/solo:done` refuses to close when any Acceptance or Test Plan item i
 
 ## Cache lag awareness
 
-The slash command body Claude sees is **injected at session start** and stays frozen until `/reload-plugins` or a new session. The on-disk version at `commands/done.md` may have moved on (a recent PR to solo's own specs is the common case). If the disk version differs from the spec text you were handed, **prefer disk**. Before executing any step below, re-read `commands/done.md` from disk and follow that copy.
+The slash command body Claude sees is **injected at session start** and stays frozen until `/reload-plugins` or a new session. That body is the spec to follow.
+
+**Only inside the solo repo itself** — detected by `.claude-plugin/plugin.json` in the working tree having `"name": "solo"`, not merely by a `commands/` folder existing — the on-disk version at `commands/done.md` may have moved on (a recent PR to solo's own specs is the common case). There, before executing any step below, re-read `commands/done.md` from disk and **prefer disk** if it differs from the spec text you were handed. In any other repo, never read `commands/*.md` from the working tree: those files are absent or belong to the user's project.
 
 This matters most when `/solo:done` is being run inside the very session that just edited `commands/done.md` — typical dogfood scenario for solo itself. Re-read on disk first, then run.
 
@@ -224,7 +226,7 @@ This appendix defines the canonical PR body that **both** `/solo:done` step 8 an
 
 > **Inline copy in loop.** An installed command only sees its own body, so `commands/loop.md` carries a verbatim copy of the block between the `pr-body-rules` markers below (everything from *Render order* through *Language*). Edit both in the same PR — the two blocks must stay byte-identical.
 
-> **Cache-lag note for self-edits.** When you (Claude) run `/solo:done` after a spec change to this very file (`commands/done.md`), re-read from disk first to get the latest appendix rules. The injected slash command body is frozen at session start, but the canonical render rules for the PR body live here and may have been updated by an in-session commit (or a freshly merged PR) — disk wins.
+> **Cache-lag note for self-edits.** Only inside the solo repo itself (`.claude-plugin/plugin.json` in the working tree has `"name": "solo"`, not merely a `commands/` folder), when you (Claude) run `/solo:done` after a spec change to this very file (`commands/done.md`), re-read from disk first to get the latest appendix rules. The injected slash command body is frozen at session start, but the canonical render rules for the PR body live here and may have been updated by an in-session commit (or a freshly merged PR) — in that repo disk wins. In any other repo, never read `commands/*.md` from the working tree.
 >
 > **Approach call-out source.** The `[approach]` line consumed by Summary synthesis (below) is expected to be written automatically by `/spirit:implement` Phase 5 — tracked in `b2nkuu/spirit#8`. Until that ships, the line only appears when the user writes it manually as a comment on the issue (or edits the body's `## Notes` directly). A PR with no Approach call-out is the normal `/solo:loop` path and is not a bug.
 
