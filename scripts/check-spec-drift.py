@@ -4,6 +4,8 @@
 Checks (stdlib only):
   1. Marker blocks: `<!-- NAME:start ... -->` ... `<!-- NAME:end -->`. A block
      name present in more than one file must have byte-identical content.
+  2. branch.pattern inline copies vs "## Appendix: branch.pattern" in
+     commands/start.md (see check_branch_pattern).
 
 Usage: check-spec-drift.py [ROOT]   (ROOT defaults to the repo root)
 """
@@ -73,6 +75,45 @@ def check_blocks(blocks, errors):
                     f"    {ref_file}: {x!r}\n    {f}: {y!r}")
 
 
+TRANSLATION = re.compile(r"`\{prefix\}` → .*?`\{slug\}` → `[^`]*`")
+SLUG_FRAGMENTS = [
+    "replace each run of characters outside `[a-z0-9]` with `-`",
+    "keep the longest run of whole `-`-separated words that fits in 40 "
+    "(hard-cut at 40 when the first word alone is longer)",
+    "use `issue`",
+]
+
+
+def check_branch_pattern(cmds, errors):
+    start = cmds / "start.md"
+    if not start.exists():
+        return
+    text = read(start)
+    idx = text.find("## Appendix: branch.pattern")
+    if idx < 0:
+        errors.append("start.md: '## Appendix: branch.pattern' not found")
+        return
+    appendix = text[idx:]
+    m = TRANSLATION.search(appendix)
+    if not m:
+        errors.append("start.md: regex translation sentence not found in appendix")
+    else:
+        for name in ("today.md", "cleanup.md"):
+            p = cmds / name
+            if p.exists() and m.group(0) not in read(p):
+                errors.append(f"{name}: branch.pattern regex translation drifted from "
+                              f"start.md appendix; expected: {m.group(0)}")
+    for frag in SLUG_FRAGMENTS:
+        if frag not in appendix:
+            errors.append(f"start.md: branch.pattern slug rule fragment missing from appendix: {frag}")
+            continue
+        for name in ("fast-track.md", "loop.md"):
+            p = cmds / name
+            if p.exists() and frag not in read(p):
+                errors.append(f"{name}: branch.pattern slug rule drifted from start.md "
+                              f"appendix; missing: {frag}")
+
+
 def main(argv):
     root = Path(argv[1]) if len(argv) > 1 else Path(__file__).resolve().parent.parent
     cmds = root / "commands"
@@ -82,6 +123,7 @@ def main(argv):
         return 1
     errors = []
     check_blocks(collect_blocks(files, errors), errors)
+    check_branch_pattern(cmds, errors)
     if errors:
         print("spec drift detected:", file=sys.stderr)
         for e in errors:
