@@ -161,7 +161,10 @@ Each pipeline is the end-to-end solo lifecycle for one issue:
 The orchestrator does this itself via `Bash`/`gh`, **serially** per issue, so the flip+branch+worktree creation is one logical step before any subagent runs:
 
 1. `gh issue edit <n> --remove-label status:planned --add-label status:in-progress` — atomic ownership flip.
-2. Compute `branch = <prefix>/<n>-<slug>`. `<prefix>` is resolved from the `type:*` label per the conventional-commits mapping in `commands/start.md` step 5 — `feat` for `type:feature`, `fix` for `type:bug`, `chore` for `type:task`/`type:idea`, `spike` for `type:research`. `<slug>` comes from the title — lowercased, non-alphanumeric → `-`, collapse repeats, trim to ~40 chars.
+2. Compute `branch` by substituting `branch.pattern` (default `{prefix}/{issue}-{slug}`; canonical rule: **Appendix: branch.pattern** in `commands/start.md`). Other text in the pattern is literal. Never hardcode `<prefix>/<n>-<slug>` — a repo with a custom pattern must get its own names.
+   - `{prefix}` from the `type:*` label: `feat` for `type:feature`, `fix` for `type:bug`, `chore` for `type:task`/`type:idea`, `spike` for `type:research` (legacy `{type}` = the raw type name).
+   - `{issue}` = `<n>`.
+   - `{slug}`: lowercase the title, replace each run of characters outside `[a-z0-9]` with `-`, trim `-` from both ends; if longer than 40 chars, keep the longest run of whole `-`-separated words that fits in 40 (hard-cut at 40 when the first word alone is longer); if empty, use `issue`.
 3. `worktree_path = <repo>/<loop.worktree_root>/<n>`.
 4. `git worktree add "<worktree_path>" -b "<branch>" "<trunk>"` — branch + dedicated worktree created off the just-synced trunk.
 5. Fetch the issue body, set `started: <claimed_at>` (the orchestrator-stamped value, **not** a freshly resolved "today") and `branch: <branch>` in the `<!-- solo:metadata -->` block, `gh issue edit --body-file`.

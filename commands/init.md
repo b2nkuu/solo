@@ -111,14 +111,8 @@ trunk:
 
 branch:
   enabled: true
-  pattern: "{prefix}/{issue}-{slug}"   # {prefix} resolved from type:* label (see mapping below)
+  pattern: "{prefix}/{issue}-{slug}"   # {prefix} = feat|fix|chore|spike from type:* — see README "Branch conventions"
   branch_from_trunk: true              # always branch from trunk, not current
-  # type:* → prefix mapping (5 prefixes, conventional-commits aligned):
-  #   type:feature              → feat
-  #   type:bug                  → fix
-  #   type:task, type:idea      → chore
-  #   type:research             → spike   (exploration / time-boxed, may not ship)
-  # release flow uses a sixth-style prefix: release/<version> (manifest bump branch in /solo:release).
 
 note:
   storage: "comment"

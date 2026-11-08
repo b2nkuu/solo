@@ -81,7 +81,7 @@ Only continue past the gate if the user passes `--force` in `$ARGUMENTS` or expl
 Read TBD config from `.solo/config.yml`:
 
 - `branch.enabled` (default `true`)
-- `branch.pattern` (default `{type}/{issue}-{slug}`)
+- `branch.pattern` (default `{prefix}/{issue}-{slug}`)
 - `trunk.name` (default `main`)
 - `trunk.max_branch_age_days` (default `2`)
 
@@ -93,20 +93,7 @@ Pre-branch hygiene:
   - Empty → create the branch automatically.
   - Non-empty → ask: `Working tree is dirty. Create branch anyway? [y/N]`. Only proceed on `y`.
 
-Build the branch name. The default `branch.pattern` is `{prefix}/{issue}-{slug}`.
-
-- `{prefix}` = resolved from the issue's `type:*` label per the conventional-commits-aligned mapping:
-
-  | type label | prefix |
-  |---|---|
-  | `type:feature` | `feat` |
-  | `type:bug` | `fix` |
-  | `type:task`, `type:idea` | `chore` |
-  | `type:research` | `spike` |
-
-  Five prefixes total: `feat`, `fix`, `chore`, `spike`, plus `release/<version>` reserved for `/solo:release`'s manifest bump branch (see `commands/release.md` step 9). If a future config sets a custom `branch.pattern` with `{type}` instead of `{prefix}`, fall back to the raw type name (legacy behaviour).
-- `{issue}` = the issue number.
-- `{slug}` = the title lowercased, non-alphanumeric → `-`, collapse repeats, trimmed to ~40 chars.
+Build the branch name from `branch.pattern` per the **Name** rule in the **Appendix: branch.pattern** at the bottom of this file (`{prefix}` from the issue's `type:*` label, `{issue}` = the issue number, `{slug}` from the title).
 
 ```bash
 git switch -c <branch-name>
@@ -140,3 +127,49 @@ Parse the issue body for the `## Acceptance` and `## Test Plan` sections. Print 
 ```
 
 Read-only — does not modify the issue.
+
+## Appendix: branch.pattern
+
+This appendix is the canonical definition of how `branch.pattern` becomes a branch name, a glob, or a parse regex. `/solo:start` step 5, `/solo:fast-track` steps 1 + 3, `/solo:loop` Stage A, `/solo:today` steps 9–10, and `/solo:cleanup` step 3 all follow it.
+
+> **Why consumers also carry an inline copy.** An installed command only sees its own injected body — in a user's repo there is no `commands/start.md` on disk to read. So each consumer states the one rule it uses inline, worded to match this appendix. When you change a rule here, update every inline copy in the same PR: `grep -rn 'Appendix: branch.pattern' commands/` lists them all. An inline copy that disagrees with this appendix is a bug.
+
+### Default
+
+`branch.pattern` defaults to `{prefix}/{issue}-{slug}` when unset in `.solo/config.yml`.
+
+### Tokens
+
+| Token | Resolves to |
+|---|---|
+| `{prefix}` | Conventional-commits prefix from the issue's `type:*` label (table below) |
+| `{type}` | Legacy: the raw type name (`feature`, `bug`, `task`, `idea`, `research`). Still honoured for old configs; new repos should use `{prefix}` |
+| `{issue}` | The issue number |
+| `{slug}` | Slug rule below |
+
+Any other text in the pattern is literal and kept as-is (e.g. `b2nkuu/` in `b2nkuu/{issue}-{slug}`).
+
+| type label | prefix |
+|---|---|
+| `type:feature` | `feat` |
+| `type:bug` | `fix` |
+| `type:task`, `type:idea` | `chore` |
+| `type:research` | `spike` |
+
+Five prefixes total: `feat`, `fix`, `chore`, `spike`, plus `release/<version>` reserved for `/solo:release`'s manifest bump branch (see `commands/release.md` step 9). `release/<version>` is never built from `branch.pattern` and carries no issue number.
+
+**Slug rule.** Lowercase the title, replace each run of characters outside `[a-z0-9]` with `-`, and trim `-` from both ends. If the result is longer than 40 chars, keep the longest run of whole `-`-separated words that fits in 40 (hard-cut at 40 when the first word alone is longer). If the result is empty — e.g. a title written only in Thai — use `issue`. The rule is deterministic: the same title always gives the same slug.
+
+### Three uses
+
+1. **Name** — substitute every token. Used when the issue number is known (`/solo:start`, `/solo:fast-track` step 3, `/solo:loop` Stage A).
+2. **Glob** — used when the issue number is not known yet (`/solo:fast-track`'s branch-already-exists preflight). Substitute every token except `{issue}` → `*`, backslash-escaping any `[`, `]`, `*`, `?` in the literal text and the resolved values. List candidates with `git branch --list '<glob>'`, then keep only those that match the **Regex** below with `{slug}` replaced by the escaped literal slug — `*` also matches `-` and `/`, so `chore/*-fix-typo` would otherwise catch `chore/40-docs-fix-typo`.
+3. **Regex** — parse an existing branch name back to its issue number (`/solo:today`, `/solo:cleanup`). Escape the literal text, then translate `{prefix}` → `(?:feat|fix|chore|spike)`, `{type}` → `(?:feature|bug|task|idea|research)`, `{issue}` → `(\d+)`, `{slug}` → `.+`, and anchor with `^…$`. The `(\d+)` capture is the issue number. No match → the branch was not created by solo; callers skip it.
+
+Restricting `{prefix}` / `{type}` to the known values keeps hand-made branches such as `docs/12-notes` from being read as solo branches for #12 (and offered for deletion by `/solo:cleanup`). Anchoring keeps `xb2nkuu/123-foo` from matching `b2nkuu/{issue}-{slug}`.
+
+| `branch.pattern` | Name (`type:task`, #12, "Fix typo") | Glob | Regex |
+|---|---|---|---|
+| `{prefix}/{issue}-{slug}` | `chore/12-fix-typo` | `chore/*-fix-typo` | `^(?:feat\|fix\|chore\|spike)/(\d+)-.+$` |
+| `b2nkuu/{issue}-{slug}` | `b2nkuu/12-fix-typo` | `b2nkuu/*-fix-typo` | `^b2nkuu/(\d+)-.+$` |
+| `{type}/{issue}-{slug}` (legacy) | `task/12-fix-typo` | `task/*-fix-typo` | `^(?:feature\|bug\|task\|idea\|research)/(\d+)-.+$` |

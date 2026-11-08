@@ -54,7 +54,7 @@ For each candidate, compute these facts (in memory, one pass — do not delete y
 
 1. **Issue number.** Try, in order:
    - Find a metadata `branch: <name>` on any **closed** GitHub issue that matches this branch name (preferred — the explicit link).
-   - Else regex-parse the branch name against `branch.pattern` translating `{prefix}` → `[a-z]+`, `{issue}` → `(\d+)`, `{slug}` → `.+`. Extract `<issue>`.
+   - Else regex-parse the branch name against `branch.pattern` (canonical rule: **Appendix: branch.pattern** in `commands/start.md`): escape the literal text, translate `{prefix}` → `(?:feat|fix|chore|spike)`, `{type}` → `(?:feature|bug|task|idea|research)`, `{issue}` → `(\d+)`, `{slug}` → `.+`, anchor with `^…$`. Extract `<issue>` from the `(\d+)` capture. A hand-made branch like `docs/12-notes` does not match, so it is never linked to #12.
    - Else: no issue link. Record `issue: null`.
 2. **PR.** Look up an open or merged PR whose `headRefName` matches the branch name:
    ```bash

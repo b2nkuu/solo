@@ -143,7 +143,7 @@ After the milestone hygiene warning, surface a soft hint when the local working 
 Use a **cheap heuristic** so this step adds no GitHub API calls beyond what step 2 already paid for:
 
 1. `git branch --format='%(refname:short)'` — local branch names, exclude `trunk.name`.
-2. For each branch, extract `<issue>` by regex-parsing the name against `branch.pattern` (translating `{prefix}` → `[a-z]+`, `{issue}` → `(\d+)`, `{slug}` → `.+`, anchored with `^` and `$` so a name like `xfeat/123-foo` does **not** match `feat/{issue}-{slug}`). Branches that don't match (e.g. user-created branches outside `/solo:start`) are **not** counted.
+2. For each branch, extract `<issue>` by regex-parsing the name against `branch.pattern` (default `{prefix}/{issue}-{slug}`; canonical rule: **Appendix: branch.pattern** in `commands/start.md`). Escape the literal text, translate `{prefix}` → `(?:feat|fix|chore|spike)`, `{type}` → `(?:feature|bug|task|idea|research)`, `{issue}` → `(\d+)`, `{slug}` → `.+`, and anchor with `^…$` — so neither `docs/12-notes` nor `xfeat/123-foo` matches the default pattern. Branches that don't match (e.g. user-created branches outside `/solo:start`) are **not** counted.
 3. For each extracted issue number, check: is it in the open-issue list from step 2? If yes, it's still active — not stale. If no, treat it as stale (the issue is either closed, missing, or in a status the step-2 filter dropped).
 
 Worktrees and PR state are intentionally **not** consulted here — those are `/solo:cleanup`'s job. The point is a fast hint, not the authoritative cleanup decision.
@@ -165,7 +165,7 @@ After the stale-local-branches hint, run one last **read-only, local-only** chec
 Only the **current** branch is inspected — solo does not walk every In Progress issue's branch. That keeps the step O(1): a single `git log` / `git diff` pair, no extra GitHub API calls beyond step 2.
 
 1. `git branch --show-current`. If empty (detached HEAD) or equal to `trunk.name` → skip silently.
-2. Extract `<issue>` from the branch name by regex-parsing it against `branch.pattern` (same translation as step 9: `{prefix}` → `[a-z]+`, `{issue}` → `(\d+)`, `{slug}` → `.+`, anchored `^…$`). No match (a branch created outside `/solo:start`) → skip silently.
+2. Extract `<issue>` from the branch name with the same regex as step 9. No match (a branch created outside `/solo:start`) → skip silently.
 3. The extracted `<issue>` must be one of the **In Progress** issues grouped in step 3. If it isn't (e.g. the branch is for a planned or already-closed issue), skip — the drift line surfaces under the In Progress group only, matching the issue's chosen surface point.
 4. Gather the branch's work relative to trunk:
    - Commit subjects: `git log <trunk.name>..HEAD --format='%s'`. Subjects only — commit **bodies** are intentionally not scanned, so a body line like `relates to #12` or `see #9` never trips the drift check.
