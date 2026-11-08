@@ -11,7 +11,9 @@ Use this after `/solo:plan` has set Acceptance + Test Plan on every backlog item
 
 ## Cache lag awareness
 
-The slash command body Claude sees is **injected at session start** and stays frozen until `/reload-plugins` or a new session. The on-disk version at `commands/loop.md` (and the sibling `commands/start.md`, `commands/test.md`, `commands/done.md` that its pipeline stages mirror) may have moved on. If the disk version differs from the spec text you were handed, **prefer disk**. Before executing any step below, re-read `commands/loop.md` from disk — and re-read the sibling command files whenever a pipeline stage delegates to their behaviour (Stage A mirrors start, Stage D mirrors test, Stage E mirrors done's PR-body appendix).
+The slash command body Claude sees is **injected at session start** and stays frozen until `/reload-plugins` or a new session. That body is self-sufficient: Stage A's branch naming and Stage E's PR body are inline copies of the rules in `commands/start.md` and `commands/done.md`, and Stage D describes its Test Plan walk in full below, so in a user's repo nothing else has to be read.
+
+**Only inside the solo repo itself** — detected by `.claude-plugin/plugin.json` in the working tree having `"name": "solo"`, not merely by a `commands/` folder existing — the on-disk specs may have moved ahead of the injected body. There, before executing any step below, re-read `commands/loop.md` from disk and **prefer disk** if it differs, and also re-read `commands/start.md` and `commands/done.md` to catch an inline copy that drifted from its source. In any other repo, never read `commands/*.md` from the working tree: those files are absent or belong to the user's project.
 
 This matters most when `/solo:loop` is being run inside the very session that just edited any of these specs — typical dogfood scenario for solo itself. Re-read on disk first, then run.
 
@@ -195,7 +197,7 @@ A `Task` subagent (model `loop.implement_model`) launched with `cwd: worktree_pa
 
 Verification has **two halves**, both required to pass a round: the per-issue Test Plan walk, then the repo-invariant hard-command gate.
 
-**D.1 — Test Plan walk.** A `Task` subagent (model `loop.verify_model`) launched with `cwd: worktree_path`. Walks the issue body's `## Test Plan` items in the spirit of `/solo:test` — proposes a check per item, runs it via Bash inside the worktree, and returns as its final message:
+**D.1 — Test Plan walk.** A `Task` subagent (model `loop.verify_model`) launched with `cwd: worktree_path`. Walks the issue body's `## Test Plan` items — proposes a check per item, runs it via Bash inside the worktree, and returns as its final message:
 
 ```json
 { "results": [{ "index": 0, "passed": true, "evidence": "..." }] }
@@ -231,7 +233,7 @@ Orchestrator, via `Bash`/`gh`, **serial** per issue (never in a subagent):
 5. `gh label create status:done --force`; `gh issue edit --remove-label status:in-progress --add-label status:done`.
 6. `gh issue close <n>`.
 7. `git -C "<worktree_path>" push -u origin "<branch>"`.
-8. Render the PR body per the **Appendix: PR body shape** at the bottom of `commands/done.md` — that appendix defines section order, omit rules, Summary synthesis, and the recognised-tags table. Single source of truth — Stage E and `/solo:done` step 8 produce identical bodies. Write the rendered Markdown to a temp file, then:
+8. Render the PR body per the **Appendix: PR body shape** at the bottom of this file — a verbatim copy of the canonical rules in `commands/done.md`, so Stage E and `/solo:done` step 8 produce identical bodies in any repo. Write the rendered Markdown to a temp file, then:
    ```
    gh pr create --repo <owner/repo> --base <trunk> --head <branch> \
      --title "<issue title>" \
@@ -296,3 +298,70 @@ To retry a red issue end-to-end, manually flip it back: `gh issue edit <n> --rem
 
 - **Automating `/solo:plan`.** The loop never generates Acceptance or Test Plan content. That quality is the human judgment the loop's correctness rests on — `/solo:plan` stays a human step, and the author filter + `status:planned` gate mean only human-curated issues ever enter an unattended run.
 - **Changing the human merge gate.** Green pipelines push branches and open PRs; they never merge. Unattended mode must not gain merge rights — enable trunk branch protection so code lands only through a reviewed PR. In headless mode this is a mechanical guarantee, not a spec promise (see the README "Runner permissions" note).
+
+## Appendix: PR body shape
+
+Verbatim copy of the canonical rules in the **Appendix: PR body shape** of `commands/done.md` (the block between the `pr-body-rules` markers). Do not edit here alone — change `done.md` and copy the block over in the same PR.
+
+<!-- pr-body-rules:start — copied verbatim into commands/loop.md; edit both -->
+
+### Render order (top to bottom)
+
+```markdown
+Closes #<n>
+
+## Summary
+<one paragraph synthesizing the issue title + ## What + the most recent [approach] line in ## Notes, if any>
+
+## Acceptance
+- [<x or space>] <item>
+…
+
+## Test Plan
+- [<x or space>] <item>
+…
+
+## Notes
+<verbatim copy of the issue's ## Notes block, with the trailing <!-- solo:metadata --> comment stripped>
+```
+
+Every section appears **only when non-empty after rendering**:
+
+- `Closes #<n>` — always present (first line, single line).
+- `## Summary` — always present. See "Summary synthesis" below for fallback when sources are sparse.
+- `## Acceptance` — omitted when the issue's `## Acceptance` is skippable. Skippable means the heading is absent, OR the section contains no `- [ ]` / `- [x]` items at all (whitespace, the empty `- [ ]` placeholder, or stray text without checklist syntax all count as "no items"). Ticks in the rendered output reflect the body the caller just wrote (`/solo:done` step 4, `/solo:loop` Stage E steps 1–4), so a `--force` close shows any `- [ ]` lines that survived the gate.
+- `## Test Plan` — same omit rule against the issue's `## Test Plan`.
+- `## Notes` — copy the issue's `## Notes` block verbatim with two strip operations applied **only** to the bottom of the section:
+  1. Remove a trailing `---` line if it is the **last non-blank line**.
+  2. Remove a trailing `<!-- solo:metadata … -->` HTML comment if it is the last non-blank block (the comment itself spans multiple lines — strip the whole opening-to-closing comment).
+  A `---` or `<!-- … -->` that appears anywhere **above** the trailing block is preserved verbatim (a user may have intentionally pasted one inside a `[decision]` line). If the resulting section has no remaining non-blank lines, omit the `## Notes` heading from the PR body entirely. Preserve every other line including the timestamped `[test]` / `[done]` / `[done-forced]` / `[loop]` / `[workflow]` / `[approach]` / `[decision]` / `[blocked]` / `[retro]` entries — that audit trail is the whole point.
+
+Do **not** insert section headings that have no content.
+
+### Summary synthesis
+
+The `## Summary` paragraph is built from these three sources, in priority order:
+
+1. **Issue title** — always available.
+2. **`## What`** — copy the first paragraph (until the first blank line) as the structural backbone.
+3. **Last `[approach]` line in `## Notes`** — if the user (or `/spirit:implement`) wrote one, splice the gist into the paragraph as "Approach: <gist>" or fold it inline. The line format is:
+   ```
+   - <YYYY-MM-DD>: [approach] <one-line description of the chosen approach>
+   ```
+   "Last" means **last in file order** (Notes are date-stamped only, not time-stamped, so file order is the canonical resolution for same-day duplicates). Later approach lines override earlier ones.
+
+Fallback when sources are sparse:
+
+- No `## What` content → Summary is the issue title used verbatim as a single sentence. Append `.` only if the title does not already end with sentence punctuation (`.`, `!`, `?`, `…`). Never paraphrase — preserve the exact title text, including non-English script and question marks like "...ได้ไหม?".
+- No `[approach]` line → render Summary from title + `## What` without an Approach call-out. This is the **expected** path for `/solo:loop`-driven PRs, which never write `[approach]` lines themselves.
+- Both empty → Summary is the title alone, rendered per the rule above. The heading still appears (Summary is the only always-present section after `Closes`).
+
+Note: the most recent `[done]` (from `/solo:done` step 4) or `[loop]` (from `/solo:loop` Stage E; legacy runs wrote `[workflow]`) line is part of the verbatim Notes copy, **not** the Summary. Don't double-render them.
+
+Keep the paragraph **under ~120 words**. Never invent scope that isn't in the issue body — Wabi-Sabi: ship what's true, don't fabricate.
+
+**Language.** Generate the Summary paragraph in the `language:` configured in `.solo/config.yml` (default `english` when unset). Technical English terms — file paths, identifiers, command names, issue numbers, the `Closes #<n>` line, the `## Summary` heading itself — stay verbatim and are never translated. The `## Acceptance`, `## Test Plan`, and `## Notes` blocks are copied **verbatim** from the issue body — their language is whatever was written there, and `language:` does not retranslate them. Only the Summary paragraph itself is generated fresh and therefore subject to `language:`.
+
+When the fallback path triggers (no `## What` content → Summary is the issue title used verbatim), the title is preserved exactly — `language:` does not translate it. This matches the title-preservation rule already stated above for non-English scripts.
+
+<!-- pr-body-rules:end -->
